@@ -4,7 +4,8 @@
 #   1. 复制 .env.example 为 .env，填好你自己的地址和音箱 ID
 #   2. docker compose up -d
 #
-# 说明：本项目不含播放引擎，songloft 需要你自己另外起（见 README「快速开始」）。
+# 说明：本文件只起点歌台，不包含播放引擎。
+#      songloft 需要单独起（compose 片段见 README「安装 → 第 1 步」）。
 
 services:
   jukebox:

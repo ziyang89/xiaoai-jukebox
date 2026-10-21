@@ -87,67 +87,168 @@
 - **songloft**（推荐）——带「智能音箱 / MIoT」插件的播放服务，支持小爱音箱系列；
 - **xiaomusic** ——更轻，但只支持部分型号（本项目保留了兼容适配）。
 
-## 快速开始
+## 安装
 
-### 0. 前提
+整个安装三步：**起播放引擎 → 起点歌台 → 网页上连一次**。全程约 15 分钟，只有第一次需要。
 
-- 一台常开的机器（NAS / 小主机 / 旧笔记本 / 树莓派都行），装了 Docker 或 Node ≥ 18；
-  > 办公室可以放在 IT 的服务器上，家里放 NAS——**这台机器需要 7×24 开着**，不然别人点不了歌；
-- 一台小爱音箱，并且已经能在米家里正常播放；
-- 一个固定内网地址（例如 `http://192.168.1.100:58092`），最好在路由器里做 DHCP 保留。
+### 准备清单
 
-### 1. 先把播放引擎跑起来
+| 需要什么 | 说明 |
+|---|---|
+| 一台 7×24 开着的机器 | NAS、软路由、旧笔记本、迷你主机都行。装了 Docker，或者用 Node ≥ 18 裸跑 |
+| 一台小爱音箱 | 已经在米家里能正常播放（Sound Pro 实测最稳，其它型号看播放引擎的支持列表） |
+| 一个固定内网 IP | 建议在路由器里做 DHCP 保留，否则重启换 IP 后音箱就找不到点歌台了 |
+| 手机 / 电脑 | 浏览器打开网页就能点歌，不用装任何 App |
 
-按 songloft 的官方文档起一个服务（默认 `58091` 端口），
-在它的界面里登录米家账号、把音箱设成「受管设备」，记下**音箱的 device_id**。
+> 两个端口：点歌台 **58092**、播放引擎 **58091**，都要在局域网内能访问。
 
-> 这一步绕不开：本项目不直接对接米家协议，而是让播放引擎去控制音箱。
+### 第 1 步：起播放引擎（songloft）
 
-### 2. 起点歌台
+点歌台自己不会控制音箱，"出声"这件事交给 songloft。新建一个目录，放一份 `docker-compose.yml`：
 
-**Docker（推荐）**
-
-```bash
-docker build -t xiaoai-jukebox ./jukebox
-
-docker run -d --name xiaoai-jukebox --restart always \
-  -p 58092:58092 \
-  -v /path/to/Music:/music \
-  -v /path/to/jukebox-data:/data \
-  -e JB_PUBLIC_BASE=http://192.168.1.100:58092 \
-  -e JB_ENGINE_BASE=http://192.168.1.100:58091 \
-  -e JB_ENGINE_DEVICE=<音箱的 device_id> \
-  -e JB_VOLUME=15 \
-  xiaoai-jukebox
+```yaml
+services:
+  songloft:
+    image: songloft/songloft:latest
+    container_name: songloft
+    restart: always
+    ports:
+      - "58091:58091"
+    environment:
+      TZ: Asia/Shanghai
+      LISTEN_PORT: "58091"
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: "换成你自己的强密码"    # 不设就是 admin/admin，务必改掉
+      PUID: "1000"
+      PGID: "1000"
+    volumes:
+      - ./songloft/music:/app/music
+      - ./songloft/data:/app/data
 ```
 
-**或者直接跑 Node（零依赖，不用装任何包）**
+```bash
+docker compose up -d
+```
+
+起好后浏览器打开 `http://<内网IP>:58091`：
+
+1. 用 `ADMIN_USERNAME` / `ADMIN_PASSWORD` 登录（首次登录先去改个强密码）；
+2. 进「智能音箱 / MIoT」插件，登录你的**米家账号**；
+3. 把音箱设成**受管设备**，点一下试听，确认真的能出声；
+4. 顺手记下**音箱的 device_id**（形如 `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`）。
+
+> 找不到 device_id 也没关系——第 4 步留空，点歌台会自动挑一台在线的 Sound Pro。
+
+### 第 2 步：下载点歌台
+
+```bash
+git clone https://github.com/ziyang89/xiaoai-jukebox.git
+cd xiaoai-jukebox
+```
+
+不想用 git：在仓库页面点 **Code → Download ZIP**，解压一样能用。
+
+### 第 3 步：启动点歌台
+
+**方式 A：docker compose（推荐）**
+
+```bash
+cp .env.example .env
+```
+
+打开 `.env`，改这三行（其余保持默认）：
+
+```ini
+# 你机器的内网 IP —— 音箱必须能访问到这个地址
+JB_PUBLIC_BASE=http://192.168.1.100:58092
+# songloft 的地址
+JB_ENGINE_BASE=http://192.168.1.100:58091
+# 音箱 device_id；留空 = 自动挑一台在线的 Sound Pro
+JB_ENGINE_DEVICE=
+```
+
+```bash
+docker compose up -d          # 首次会构建镜像，一两分钟
+docker compose logs -f        # 看到 listening on 58092 就起来了
+```
+
+**方式 B：直接裸跑 Node（零依赖，不用装任何包）**
 
 ```bash
 cd jukebox
-cp config.example.json config.json   # 改成你自己的地址和 device_id
+cp config.example.json config.json    # 改 publicBase / engine.base / engine.deviceId
 JB_CONFIG=./config.json node server.js
 ```
 
-### 3. 打开网页
+> 想让开机自启：Docker 已经写了 `restart: always`；
+> 裸跑就用 systemd（Linux）、群晖的「任务计划」、fnOS 的「开机启动」挂一条 `node server.js`。
 
-浏览器访问 `http://<你的内网IP>:58092`，起个昵称就能点歌。
+**数据放哪**
 
-- **办公室**：把这个地址发到部门群，或做成二维码贴在音箱旁边；
-- **家里**：在手机/平板上「添加到主屏幕」，当成一个 App 用。
+| 目录 | 存什么 | 建议 |
+|---|---|---|
+| `data/music`（容器内 `/music`） | 下载下来的 mp3 / flac | 曲库会一直变大，NAS 上给个几十 GB 就够用很久 |
+| `data/jukebox`（容器内 `/data`） | 昵称、聊天记录、曲库索引、QQ 凭据、管理员哈希 | **要备份的就是这个目录** |
 
-点右下角 **🔒** 可以设管理员口令、配音源（只有管理员需要，普通点歌不用）。
+### 第 4 步：网页上连一次（只有第一次）
 
-### 4. （可选）接入 QQ 音乐
+浏览器打开 `http://<内网IP>:58092`。引擎还没配好时，页面左侧会出现 **⚙️ 连接播放引擎** 卡片，填四项：
 
-QQ 音源走的是**你自己账号的会员 cookie**，音质更高、不占公共接口配额：
+| 字段 | 填什么 |
+|---|---|
+| songloft 地址 | `http://192.168.1.100:58091` |
+| 账号 | 默认 `admin` |
+| 密码 | 第 1 步设的 `ADMIN_PASSWORD` |
+| 音箱 device_id | 可以留空（留空自动挑） |
 
-1. 网页 → 🔒 → **🎵 QQ 会员音源**；
-2. 填 `qm_keyst`（登录 y.qq.com 后从 cookie 里取）和 QQ 号；
-3. 点「测试」通过即可，**默认 320k**，会员等级更高可改 FLAC。
+点 **「保存并连接」**。它会拿新凭据**先探一次，通了才写盘**——密码写错也不会把已有配置弄坏。
 
-> 不配也能用——会自动回退到公开音源（网易云，有频率限制）。
-> cookie 只存在你自己的磁盘上，不进代码、不进镜像、不进仓库。
+> 密码只写给服务端，不回传页面、不进日志；落在 `<数据目录>/runtime-config.json`，重启不丢。
+> 以后要改，点右上角 **⚙** 再填一次。
+
+### 第 5 步：设管理员口令
+
+右下角 **🔒** → 设置管理员口令。这个口令**只管四件事**：直接切歌、昵称占用管理、QQ 音源配置、随机电台开关。
+普通点歌、投票、点赞、按停止，**都不需要口令**。
+
+口令只存 `sha256(salt::pin)` 哈希、不下发；忘了就删掉 `<数据目录>/admin.json` 重新设。
+
+### 第 6 步（可选）：接入 QQ 会员音源
+
+不配也能用（走网易云公共源，有频率限制）。想让音质好、不吃公共配额：
+
+1. 浏览器登录 [y.qq.com](https://y.qq.com)，F12 → Application → Cookies，复制 `qm_keyst` 的值；
+2. 网页 → 🔒 → **🎵 QQ 会员音源**，填 `qm_keyst` 和 QQ 号，点「测试」；
+3. 通过后默认 **320k**，会员等级够可以改 FLAC。
+
+> 凭据只落在你的 `runtime-config.json`，不进代码、不进镜像、不进仓库。
+
+### 装完自己验一遍
+
+```bash
+curl http://192.168.1.100:58092/api/health     # {"ok":true,...}
+curl http://192.168.1.100:58092/api/state      # engine.ready 应为 true
+```
+
+页面上再确认三件事：
+
+- [ ] 点一首歌，几十秒内音箱开始放（首次要下载，慢一点正常）
+- [ ] 进度条在走，不是卡在 0:00
+- [ ] 手机和电脑同时开着，队列和「正在播放」是同步的
+
+更细的排障信息（判定依据、音源状态、最近日志）都在 `http://<内网IP>:58092/api/diag`，不用登机器看日志。
+
+### 常见问题
+
+| 现象 | 原因 | 怎么修 |
+|---|---|---|
+| 页面打不开 | 端口没映射 / 防火墙拦了 | `docker compose ps` 看端口；NAS 防火墙放行 58092 |
+| 「保存并连接」提示连不上 | 地址写错或密码错 | 浏览器直接开 `http://IP:58091` 能不能登录；别填公网域名 |
+| 连上了但音箱没声 | 音箱没设成受管设备 / device_id 不对 | 回 songloft 确认设备在线；把 device_id 清空再试 |
+| 点了歌一直「排队中」 | 音源取链失败 | 看 `/api/diag`，`sources.qq.broken` 为 true 就是 QQ 凭据过期了 |
+| 重启路由器后不能用了 | 机器 IP 变了 | 做 DHCP 保留，并同步改 `.env` 里两个 IP |
+| 音量太大/太小 | 默认 15 | 底栏滑杆临时调；长期改 `JB_VOLUME`（办公室 20~30，家里 10~15） |
+| 想放公网给朋友用 | — | **别这么做**，没有 HTTPS 也没有账号体系，等于把点歌台交给所有人 |
 
 ## 部署建议（按场景）
 
