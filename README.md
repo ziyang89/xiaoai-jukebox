@@ -7,6 +7,10 @@
 [![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
+<p align="center">
+  <img src="docs/screenshots/overview.png" alt="小爱点歌台主界面：左栏点歌与排行榜，中间正在播放与待播队列，右栏聊天室">
+</p>
+
 ---
 
 ## 为什么会有这个东西
@@ -66,6 +70,25 @@
 **为什么非要"昵称"和"投票"？**
 办公室里最容易出现的两种破坏者是"一个人开三个标签页刷票"和"一个人连着切十首"。
 所以：票只认**服务端认过的昵称**（不是浏览器 cookie，换标签页不涨票），切歌要**过半**，插队要**3 个不同的人**。
+
+## 界面
+
+上面那张是主界面：左边点歌和排行榜，中间正在播放 + 待播队列，右边聊天室。再看三张细节。
+
+**排行榜**——QQ 音乐 30 个官方榜单，卡片可折叠（默认收起，不占屏）。榜单里的歌点 `＋` 直接入队，已经存到本地曲库的会标 **「已存 NAS · 秒播」**，点下去几秒就响，不占音源配额。
+
+![排行榜：30 个 QQ 官方榜单，已缓存的标「已存 NAS · 秒播」](docs/screenshots/toplist.png)
+
+**选榜单**——自定义深色下拉面板，按分组排列（巅峰榜 / 地区榜 / 主题榜…）。没用原生 `<select>`，因为系统弹层在深色页面里是白底，几乎看不清字。
+
+![选榜单：自定义深色面板，分组标题 + 选中项高亮](docs/screenshots/toplist-picker.png)
+
+**手机**——窄屏自动变单列，按钮加大。音量、投票切歌、⏹ 停止都在拇指够得到的地方，老人小孩也能用。
+
+![手机：单列布局，大按钮](docs/screenshots/mobile.png)
+
+> 截图里的歌曲、昵称、聊天内容都是本地 mock 数据，不是真实账号。
+
 
 ## 它是怎么跑的
 
@@ -319,6 +342,7 @@ jukebox/
   tests/                 30 个自测脚本（含 mock 音箱 / mock 音源 / mock QQ）
   README.md              实现细节、踩坑记录、调试手册
 tools/static-server.js   本地预览用的静态服务 + 反代
+docs/screenshots/        README 里的界面截图（本地 mock 数据截的）
 ```
 
 ## 测试
