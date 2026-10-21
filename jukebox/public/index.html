@@ -98,7 +98,7 @@
   .card h2 .n{background:rgba(139,92,246,.2);color:var(--pri2);border-radius:6px;padding:1px 7px;font-size:11px}
 
   /* ---------- 搜索 ---------- */
-  .searchbar{display:flex;gap:8px}
+  .searchbar{display:flex;gap:8px;position:relative}
   .searchbar input{
     flex:1;background:rgba(0,0,0,.3);border:1px solid var(--card-br);color:var(--tx);
     border-radius:12px;padding:12px 14px;font-size:15px;min-width:0;
@@ -128,6 +128,8 @@
   .sel .seltxt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .sel .caret{flex:none;font-size:10px;color:var(--tx3);transition:transform .15s}
   .sel[aria-expanded="true"] .caret{transform:rotate(180deg);color:var(--pri2)}
+  /* 下拉面板挂在 .searchbar（整行）上而不是按钮容器上 —— 否则面板只有按钮那么宽，
+     下面列表的「＋」会从面板右侧露出来，看着像坏了 */
   .selpop{
     position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:70;display:none;
     max-height:330px;overflow:auto;overscroll-behavior:contain;padding:6px;
@@ -545,9 +547,9 @@
             <button class="sel" id="topPickBtn" aria-haspopup="listbox" aria-expanded="false" title="选一个榜单">
               <span class="seltxt" id="topPickTxt">选择榜单</span><span class="caret">▼</span>
             </button>
-            <div class="selpop" id="topPickPop" role="listbox"></div>
           </div>
           <button class="btn ghost sm" id="btnTopRefresh" title="重新拉一次（绕过 30 分钟缓存）">刷新</button>
+          <div class="selpop" id="topPickPop" role="listbox"></div>
         </div>
         <div id="topTip" style="font-size:12px;color:var(--tx3);margin:8px 2px 0"></div>
         <div class="list" id="topList"></div>
@@ -1319,9 +1321,11 @@ $('topPickBtn').onclick = (e) => {
   if ($('topPickPop').classList.contains('on')) closeTopPop();
   else openTopPop();
 };
-// 点面板外面 / 按 Esc 关掉
+// 点面板外面 / 按 Esc 关掉（面板现在挂在整个 .searchbar 上，不在 topSelWrap 里，两个都要判）
 document.addEventListener('click', (e) => {
-  if (!$('topSelWrap').contains(e.target)) closeTopPop();
+  const inBtn = $('topSelWrap').contains(e.target);
+  const inPop = $('topPickPop').contains(e.target);
+  if (!inBtn && !inPop) closeTopPop();
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeTopPop();

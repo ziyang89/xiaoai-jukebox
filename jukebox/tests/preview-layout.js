@@ -127,6 +127,17 @@ if (location.search.includes('preview')) {
   localStorage.setItem(CID_KEY, CID);
   localStorage.setItem(NICK_KEY, myNick);
 }
+// [PREVIEW ONLY] ?search=晴天 → 自动搜一次，让左栏有搜索结果（主图不至于空着）
+const qm = location.search.match(/search=([^&]+)/);
+if (qm) {
+  const kw = decodeURIComponent(qm[1]);
+  const t = setInterval(() => {
+    const inp = document.getElementById('q');
+    const btn = document.getElementById('btnSearch');
+    if (inp && btn) { clearInterval(t); inp.value = kw; btn.click(); }
+  }, 150);
+  setTimeout(() => clearInterval(t), 6000);
+}
 // [PREVIEW ONLY] 量一下谁把页面撑宽了（把结果打在页面上，截图就能读到）
 if (location.search.includes('measure')) {
   setTimeout(() => {
@@ -290,6 +301,8 @@ if (location.search.includes('measure')) {
   // ---- 4. 截图 ----
   // 三列 4:4:3（点歌 / 正在播放+待播 / 聊天室）
   await shot('desktop', '1440,900');
+  // 主图：左栏带搜索结果（给 README 用，空栏看着像没做完）
+  await shot('search', '1440,1000', '?preview=1&search=' + encodeURIComponent('晴天'));
   // 中等宽度：三列都还在，验证挤压后聊天室仍不低于 220px
   await shot('mid', '1024,900');
   await shot('narrow', '492,900');

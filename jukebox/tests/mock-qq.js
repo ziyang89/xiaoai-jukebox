@@ -58,15 +58,27 @@ const TOP_LISTS = [
   ...[28, 29, 30, 31, 32].map((topId, i) => ({ topId, group: '电台榜', title: ['私人FM热播', '会员尊享榜', '每日推荐', '新歌速递', '编辑精选'][i] })),
 ];
 const TOP_GROUPS = [...new Set(TOP_LISTS.map((x) => x.group))];
+// 截图要给人看，用真实感的歌名（纯文案，不影响任何断言）；超过一圈加后缀保证不重名
+const TOP_SEED = [
+  ['起风了', '买辣椒也用券'], ['孤勇者', '陈奕迅'], ['夜空中最亮的星', '逃跑计划'],
+  ['晴天', '周杰伦'], ['漠河舞厅', '柳爽'], ['向云端', '小霞'],
+  ['我记得', '赵雷'], ['罗刹海市', '刀郎'], ['花海', '周杰伦'],
+  ['一路生花', '温奕心'], ['稻香', '周杰伦'], ['海底', '一支榴莲'],
+];
 function topSongs(num) {
-  return Array.from({ length: Math.max(1, num) }).map((_, i) => ({
-    name: `榜单曲${i + 1}`,
-    singer: [{ name: i % 2 ? '榜单歌手B' : '榜单歌手A' }],
-    mid: `qqt${i}`,
-    file: { media_mid: `qqtm${i}`, size_320mp3: 1, size_flac: 1 },
-    interval: 180 + i,
-    album: { name: `榜单专辑${i + 1}` },
-  }));
+  return Array.from({ length: Math.max(1, num) }).map((_, i) => {
+    const [title, artist] = TOP_SEED[i % TOP_SEED.length];
+    const round = Math.floor(i / TOP_SEED.length);
+    const name = round ? `${title}（${['Live', 'Remix', '现场版', '伴奏'][round - 1] || '版本' + round}）` : title;
+    return {
+      name,
+      singer: [{ name: artist }],
+      mid: `qqt${i}`,
+      file: { media_mid: `qqtm${i}`, size_320mp3: 1, size_flac: 1 },
+      interval: 180 + i,
+      album: { name: `《${title}》` },
+    };
+  });
 }
 
 /** 复算签名：从 server.js 借同一份实现（模拟"服务端校验"，比自写一遍更有意义） */
@@ -182,13 +194,16 @@ http
       if (mode.searchCode) return send(res, 200, JSON.stringify({ code: mode.searchCode }));
       const kw = String(r1.param?.query || '').trim();
       const base = kw.split(/\s+/)[0] || '测试';
+      // 截图要给人看，歌手/专辑也用真实感的（纯文案，不影响断言）
+      const ARTIST_OF = { 晴天: '周杰伦', 稻香: '周杰伦', 夜曲: '周杰伦', 七里香: '周杰伦', 青花瓷: '周杰伦' };
+      const artist = ARTIST_OF[base] || ['毛不易', '陈奕迅', '五月天', '蔡健雅'][base.length % 4];
       const songs = [0, 1, 2].map((i) => ({
         name: i === 0 ? base : `${base} (版本${i})`,
-        singer: [{ name: '测试歌手' }],
+        singer: [{ name: artist }],
         mid: `qqmid${i}`,
         file: { media_mid: `qqmedia${i}` },
         interval: 200 + i,
-        album: { name: '测试专辑', mid: 'albm' },
+        album: { name: `《${base}》`, mid: 'albm' },
       }));
       return send(res, 200, JSON.stringify({ code: 0, req_1: { data: { body: { song: { list: songs } } } } }));
     }
