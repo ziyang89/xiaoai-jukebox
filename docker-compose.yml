@@ -1,0 +1,41 @@
+# 小爱点歌台 —— 一键启动
+#
+# 用法：
+#   1. 复制 .env.example 为 .env，填好你自己的地址和音箱 ID
+#   2. docker compose up -d
+#
+# 说明：本项目不含播放引擎，songloft 需要你自己另外起（见 README「快速开始」）。
+
+services:
+  jukebox:
+    build: ./jukebox
+    image: xiaoai-jukebox:latest
+    container_name: xiaoai-jukebox
+    restart: always
+    ports:
+      - "${JB_PORT:-58092}:58092"
+    environment:
+      TZ: Asia/Shanghai
+      JB_PORT: 58092
+      # 音箱能访问到的本服务地址（写你的内网 IP）
+      JB_PUBLIC_BASE: ${JB_PUBLIC_BASE:-http://192.168.1.100:58092}
+      # 播放引擎（songloft）地址
+      JB_ENGINE_BASE: ${JB_ENGINE_BASE:-http://192.168.1.100:58091}
+      # 音箱 device_id（在播放引擎里能看到）
+      JB_ENGINE_DEVICE: ${JB_ENGINE_DEVICE:-}
+      # 音量：每首歌都拉回这个值
+      JB_VOLUME: ${JB_VOLUME:-15}
+      # 曲库缓存目录
+      JB_MUSIC_DIR: /music
+      JB_DATA_DIR: /data
+    volumes:
+      # 下载下来的 mp3 / flac 存这里，以后断网也能放
+      - ${MUSIC_DIR:-./data/music}:/music
+      # 昵称、聊天记录、曲库索引、QQ 凭据都存这里
+      - ${DATA_DIR:-./data/jukebox}:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:58092/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

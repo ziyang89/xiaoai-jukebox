@@ -1,0 +1,12 @@
+# 统一换行，避免 Windows/macOS 互拉时整文件 diff
+* text=auto eol=lf
+
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.mp3 binary
+*.flac binary
+*.zip binary

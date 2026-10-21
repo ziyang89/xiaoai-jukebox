@@ -1,0 +1,2116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0b1a">
+<title>小爱点歌台</title>
+<style>
+  :root{
+    --bg:#0d0b1a; --bg2:#151228; --card:rgba(255,255,255,.055);
+    --card-br:rgba(255,255,255,.09);
+    --tx:#f0eefb; --tx2:#a49fc4; --tx3:#6f6a92;
+    --pri:#8b5cf6; --pri2:#a78bfa; --acc:#22d3ee;
+    --ok:#34d399; --warn:#fbbf24; --err:#f87171;
+    --r:16px;
+    --dockh:calc(72px + env(safe-area-inset-bottom));
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{
+    background:
+      radial-gradient(1100px 520px at 12% -8%, rgba(139,92,246,.30), transparent 60%),
+      radial-gradient(900px 460px at 96% 4%, rgba(34,211,238,.16), transparent 58%),
+      var(--bg);
+    color:var(--tx);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    height:100vh;overflow:hidden;display:flex;flex-direction:column;
+  }
+
+  /* ---------- 顶栏 ---------- */
+  header{
+    flex:none;z-index:30;
+    backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    background:rgba(13,11,26,.78); border-bottom:1px solid var(--card-br);
+    padding:calc(10px + env(safe-area-inset-top)) 0 10px;
+  }
+  .hd{max-width:1440px;margin:0 auto;padding:0 14px;display:flex;align-items:center;gap:10px}
+  .logo{
+    width:36px;height:36px;border-radius:12px;flex:0 0 36px;
+    background:linear-gradient(135deg,var(--pri),var(--acc));
+    display:grid;place-items:center;font-size:19px;
+    box-shadow:0 6px 20px rgba(139,92,246,.42);
+  }
+  h1{font-size:16px;margin:0;font-weight:650;letter-spacing:.3px}
+  .sub{font-size:11.5px;color:var(--tx2);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:44vw}
+  .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--tx3);margin-right:5px;vertical-align:1px}
+  .dot.on{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+  .dot.off{background:var(--err);box-shadow:0 0 8px var(--err)}
+  .grow{flex:1;min-width:6px}
+  .online{
+    display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--tx2);
+    background:var(--card);border:1px solid var(--card-br);border-radius:20px;padding:5px 11px;flex:none;
+  }
+  .me{
+    display:flex;align-items:center;gap:7px;background:var(--card);border:1px solid var(--card-br);
+    border-radius:20px;padding:4px 5px 4px 11px;flex:none;
+  }
+  .me .nick{font-size:13px;font-weight:600;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .me button{
+    width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.09);color:var(--tx2);font-size:13px;
+  }
+  .me button:hover{background:var(--pri);color:#fff}
+
+  /* ---------- 布局：三列 4 : 4 : 3（点歌 / 正在播放+待播 / 聊天室） ---------- */
+  .cols{
+    flex:1;min-height:0;display:grid;
+    grid-template-columns:minmax(0,4fr) minmax(0,4fr) minmax(260px,3fr);
+    gap:14px;max-width:1440px;width:100%;margin:0 auto;
+    padding:14px 14px calc(var(--dockh) + 12px);
+    overflow:hidden;
+  }
+  /* 列内间距一律走 gap（卡片自带的 margin-top 在下方 .card 之后被清零，
+     顺序不能反：.col > * 与 .card 同权重，必须写在后面才生效）*/
+  .col{min-height:0;min-width:0;display:flex;flex-direction:column;gap:14px}
+  /* 空的通知条要整个不占位：flex gap 是插在「所有参与布局的子元素」之间的，
+     哪怕它高 0 也会多顶出一个 14px 的缝 → 左列首卡就比中列低 14px（三列不齐平）。*/
+  #banner:empty{display:none}
+  .col-l{overflow-y:auto;overflow-x:hidden;padding-right:3px}
+  .col-l::-webkit-scrollbar,.col-m::-webkit-scrollbar,.chatscroll::-webkit-scrollbar,.list::-webkit-scrollbar,#queue::-webkit-scrollbar{width:7px}
+  .col-l::-webkit-scrollbar-thumb,.col-m::-webkit-scrollbar-thumb,.chatscroll::-webkit-scrollbar-thumb,#queue::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:4px}
+  .col-m{overflow:hidden}
+  .col-r{overflow:hidden}
+
+  /* ---------- 卡片 ---------- */
+  .card{
+    background:var(--card);border:1px solid var(--card-br);border-radius:var(--r);
+    padding:14px;margin-top:14px;
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+    flex:none;
+  }
+  .card:first-child{margin-top:0}
+  /* 列内间距统一交给 .col 的 gap：卡片自带的 margin-top 全清零。
+     左列首个子元素是空 #banner（＋ display:none 的 #setupCard），真正的首卡不满足
+     :first-child，靠 .card:first-child 清不掉 → 会凭空下坠 14px，三列顶部就不齐平。
+     必须写在这里（.card 之后）：.col > * 与 .card 同权重，靠源码顺序取胜。*/
+  .col > *{margin-top:0}
+  .card h2{font-size:13px;margin:0 0 11px;color:var(--tx2);font-weight:600;letter-spacing:.6px;display:flex;align-items:center;gap:7px}
+  .card h2 .n{background:rgba(139,92,246,.2);color:var(--pri2);border-radius:6px;padding:1px 7px;font-size:11px}
+
+  /* ---------- 搜索 ---------- */
+  .searchbar{display:flex;gap:8px}
+  .searchbar input{
+    flex:1;background:rgba(0,0,0,.3);border:1px solid var(--card-br);color:var(--tx);
+    border-radius:12px;padding:12px 14px;font-size:15px;min-width:0;
+  }
+  .searchbar input:focus{outline:none;border-color:var(--pri);background:rgba(0,0,0,.42)}
+  .searchbar input::placeholder{color:var(--tx3)}
+  button{font-family:inherit;cursor:pointer;border:none;transition:.15s}
+  button:active{transform:scale(.96)}
+  .btn{
+    background:linear-gradient(135deg,var(--pri),#7c3aed);color:#fff;border-radius:12px;
+    padding:12px 20px;font-size:15px;font-weight:600;box-shadow:0 5px 18px rgba(139,92,246,.35);
+    white-space:nowrap;
+  }
+  .btn.ghost{background:var(--card);border:1px solid var(--card-br);color:var(--tx2);box-shadow:none;font-weight:500}
+  .btn.sm{padding:8px 13px;font-size:13px;border-radius:10px}
+
+  /* 榜单选择：自定义下拉（不用原生 <select> —— 系统弹层的白底/蓝条在深色页面里根本看不清） */
+  .selwrap{position:relative;flex:1;min-width:0}
+  .sel{
+    width:100%;display:flex;align-items:center;gap:8px;justify-content:space-between;
+    background:rgba(255,255,255,.05);border:1px solid var(--card-br);color:var(--tx);
+    border-radius:12px;padding:11px 12px;font-size:14px;font-family:inherit;font-weight:500;
+    text-align:left;
+  }
+  .sel:focus-visible{outline:none;border-color:var(--pri)}
+  .sel[aria-expanded="true"]{border-color:var(--pri);background:rgba(139,92,246,.12)}
+  .sel .seltxt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sel .caret{flex:none;font-size:10px;color:var(--tx3);transition:transform .15s}
+  .sel[aria-expanded="true"] .caret{transform:rotate(180deg);color:var(--pri2)}
+  .selpop{
+    position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:70;display:none;
+    max-height:330px;overflow:auto;overscroll-behavior:contain;padding:6px;
+    background:#181322;border:1px solid rgba(255,255,255,.14);border-radius:13px;
+    box-shadow:0 20px 46px rgba(0,0,0,.62);scrollbar-width:thin;
+    scrollbar-color:rgba(255,255,255,.22) transparent;
+  }
+  .selpop::-webkit-scrollbar{width:8px}
+  .selpop::-webkit-scrollbar-track{background:transparent}
+  .selpop::-webkit-scrollbar-thumb{background:rgba(255,255,255,.2);border-radius:99px}
+  .selpop::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.32)}
+  .selpop.on{display:block}
+  .selpop .grp{
+    font-size:11px;color:var(--tx2);padding:9px 9px 5px;letter-spacing:.5px;font-weight:600;
+  }
+  .selpop .grp + .grp{
+    margin-top:5px;padding-top:11px;border-top:1px solid rgba(255,255,255,.1);
+  }
+  .selpop .opt{
+    padding:9px 10px;border-radius:9px;font-size:13.5px;color:var(--tx);
+    cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .selpop .opt:hover{background:rgba(255,255,255,.09)}
+  .selpop .opt.on{background:rgba(124,58,237,.3);color:#fff;font-weight:650}
+  .selpop .opt.on::after{content:'✓';float:right;color:var(--pri2);font-weight:700;margin-left:8px}
+  .rk{
+    width:24px;flex:none;text-align:right;font-size:12px;color:var(--tx3);
+    font-variant-numeric:tabular-nums;
+  }
+  .rk.hot{color:#fbbf24;font-weight:700}
+
+  /* ---------- 歌曲行 ---------- */
+  .list{margin-top:4px}
+  .row{
+    display:flex;align-items:center;gap:11px;padding:9px 6px;border-radius:12px;
+    border-bottom:1px solid rgba(255,255,255,.045);
+  }
+  .row:last-child{border-bottom:none}
+  .row:hover{background:rgba(255,255,255,.035)}
+  .cov{
+    width:44px;height:44px;flex:0 0 44px;border-radius:10px;object-fit:cover;
+    background:linear-gradient(135deg,rgba(139,92,246,.35),rgba(34,211,238,.22));
+    display:grid;place-items:center;font-size:18px;
+  }
+  .meta{flex:1;min-width:0}
+  .nm{font-size:14.5px;font-weight:560;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ar{font-size:12.5px;color:var(--tx2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+  .tags{display:flex;gap:5px;margin-top:4px;flex-wrap:wrap}
+  .tag{font-size:10.5px;padding:1.5px 7px;border-radius:6px;background:rgba(255,255,255,.07);color:var(--tx2)}
+  .tag.p{background:rgba(139,92,246,.22);color:var(--pri2)}
+  .tag.ok{background:rgba(52,211,153,.18);color:var(--ok)}
+  .tag.w{background:rgba(251,191,36,.18);color:var(--warn)}
+  .tag.e{background:rgba(248,113,113,.18);color:var(--err)}
+  .add{
+    width:36px;height:36px;flex:0 0 36px;border-radius:11px;font-size:18px;
+    background:rgba(139,92,246,.18);color:var(--pri2);border:1px solid rgba(139,92,246,.3);
+  }
+  .add:hover{background:var(--pri);color:#fff}
+  .add[disabled]{opacity:.4;pointer-events:none}
+  .idx{
+    width:24px;flex:0 0 24px;text-align:center;font-size:13px;color:var(--tx3);font-variant-numeric:tabular-nums;
+  }
+  .mini{
+    width:30px;height:30px;flex:0 0 30px;border-radius:9px;font-size:14px;
+    background:rgba(255,255,255,.06);color:var(--tx2);border:1px solid var(--card-br);
+  }
+  .mini:hover{background:rgba(255,255,255,.12);color:var(--tx)}
+  .mini.danger:hover{background:rgba(248,113,113,.2);color:var(--err);border-color:rgba(248,113,113,.3)}
+  /* 队列里的「👍 x/N」：宽度自适应，赞过的人高亮 */
+  .mini.top{
+    width:auto;flex:0 0 auto;padding:0 9px;font-size:12px;white-space:nowrap;
+    font-variant-numeric:tabular-nums;
+  }
+  .mini.top:hover{background:rgba(255,255,255,.12);color:var(--tx)}
+  .mini.top.voted{color:#fbbf24;border-color:rgba(251,191,36,.45);background:rgba(251,191,36,.12)}
+
+  /* ---------- 当前播放 ---------- */
+  .now{display:flex;gap:13px;align-items:center}
+  .now .cov{width:58px;height:58px;flex:0 0 58px;border-radius:13px;font-size:23px}
+  .now .nm{font-size:16px;font-weight:650}
+  .bar{height:4px;background:rgba(255,255,255,.09);border-radius:3px;overflow:hidden;margin-top:12px}
+  .bar > div{height:100%;width:0;background:linear-gradient(90deg,var(--pri),var(--acc));border-radius:3px;transition:width .5s}
+  .barinfo{display:flex;justify-content:space-between;font-size:11px;color:var(--tx3);margin-top:6px}
+
+  /* ---------- 中列：正在播放 + 待播放列表（两者常驻，空的时候也有占位） ---------- */
+  #nowCard{flex:none}
+  #nowIdle{padding:16px 10px 14px}
+  #nowIdle .ico{font-size:30px;opacity:.3;display:block;margin-bottom:8px}
+  #queueCard{flex:1;min-height:0;display:flex;flex-direction:column}
+  #queue{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;max-height:none}
+  /* 队列为空时把占位文案摆在中间，别贴着顶 */
+  #queue > .empty{min-height:100%;display:flex;flex-direction:column;justify-content:center;box-sizing:border-box}
+
+  /* ---------- 投票条 ---------- */
+  .votebar{
+    margin-top:12px;border-top:1px solid rgba(255,255,255,.07);padding-top:11px;
+    display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  }
+  .votebar .vtxt{font-size:12.5px;color:var(--tx2);flex:1;min-width:120px}
+  .votebar .vtxt b{color:var(--pri2)}
+  .votebar .vwho{font-size:11.5px;color:var(--tx3);margin-top:3px}
+  .vbtn{
+    background:linear-gradient(135deg,#f43f5e,#e11d48);color:#fff;border-radius:11px;
+    padding:9px 15px;font-size:13.5px;font-weight:600;white-space:nowrap;flex:none;
+    box-shadow:0 4px 14px rgba(244,63,94,.32);
+  }
+  .vbtn.voted{background:linear-gradient(135deg,#7c3aed,#6d28d9);box-shadow:0 4px 14px rgba(124,58,237,.32)}
+  /* 停止：深色次级按钮，别和红色的「投票切歌」抢注意力 */
+  .vbtn.stop{
+    background:linear-gradient(135deg,#3f3f46,#18181b);
+    border:1px solid rgba(255,255,255,.16);
+    box-shadow:0 4px 14px rgba(0,0,0,.4);
+    color:var(--tx);
+  }
+  @media (max-width:560px){ .vbtn{flex:1 1 auto;padding:9px 10px;font-size:12.5px} }
+
+  /* ---------- 空态 ---------- */
+  .empty{text-align:center;padding:24px 10px;color:var(--tx3);font-size:13.5px}
+  .empty .ico{font-size:32px;opacity:.34;display:block;margin-bottom:9px}
+
+  /* ---------- 聊天室 ---------- */
+  .chatcard{
+    flex:1;min-height:0;display:flex;flex-direction:column;margin-top:0;
+    background:var(--card);border:1px solid var(--card-br);border-radius:var(--r);
+    overflow:hidden;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  }
+  .chathead{
+    flex:none;display:flex;align-items:center;gap:8px;padding:12px 14px 10px;
+    border-bottom:1px solid rgba(255,255,255,.06);
+  }
+  .chathead h2{margin:0;font-size:13px;color:var(--tx2);font-weight:600;letter-spacing:.6px}
+  .chathead .users{font-size:11.5px;color:var(--tx3);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .chatscroll{flex:1;min-height:0;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:11px}
+  .msg{display:flex;gap:8px;max-width:100%;align-items:flex-start}
+  .msg .avt{
+    width:30px;height:30px;flex:0 0 30px;border-radius:10px;display:grid;place-items:center;
+    font-size:13px;font-weight:600;color:#fff;background:linear-gradient(135deg,#7c3aed,#22d3ee);
+  }
+  .msg .bub{min-width:0;max-width:calc(100% - 46px)}
+  .msg .who{font-size:11px;color:var(--tx3);margin-bottom:3px}
+  .msg .txt{
+    font-size:14px;line-height:1.5;background:rgba(255,255,255,.07);
+    border:1px solid var(--card-br);border-radius:4px 12px 12px 12px;padding:8px 12px;
+    word-break:break-word;white-space:pre-wrap;
+  }
+  .msg.me{flex-direction:row-reverse}
+  .msg.me .bub{text-align:right}
+  .msg.me .txt{
+    background:linear-gradient(135deg,rgba(139,92,246,.9),rgba(124,58,237,.85));
+    border-color:rgba(167,139,250,.4);border-radius:12px 4px 12px 12px;color:#fff;
+  }
+  .msg.sys{justify-content:center}
+  .msg.sys .bub{max-width:100%}
+  .msg.sys .txt{
+    background:rgba(255,255,255,.045);border-color:transparent;border-radius:20px;
+    font-size:12px;color:var(--tx3);padding:5px 12px;text-align:center;
+  }
+  .chatbar{
+    flex:none;display:flex;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom) * 0);
+    border-top:1px solid rgba(255,255,255,.06);background:rgba(0,0,0,.14);
+  }
+  .chatbar input{
+    flex:1;background:rgba(0,0,0,.3);border:1px solid var(--card-br);color:var(--tx);
+    border-radius:11px;padding:11px 13px;font-size:14.5px;min-width:0;
+  }
+  .chatbar input:focus{outline:none;border-color:var(--pri)}
+  .chatbar input::placeholder{color:var(--tx3)}
+
+  /* ---------- 底栏 ---------- */
+  .dock{
+    position:fixed;left:0;right:0;bottom:0;z-index:40;
+    background:rgba(13,11,26,.92);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    border-top:1px solid var(--card-br);
+    padding:9px 14px calc(9px + env(safe-area-inset-bottom));
+  }
+  .dock .in{max-width:1440px;margin:0 auto;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .vol{display:flex;align-items:center;gap:8px;flex:1 1 130px;min-width:110px}
+  .vol input[type=range]{
+    flex:1;-webkit-appearance:none;height:4px;border-radius:3px;min-width:50px;
+    background:linear-gradient(90deg,var(--pri) 0%,var(--pri) var(--vp,15%),rgba(255,255,255,.13) var(--vp,15%));
+  }
+  .vol input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:17px;height:17px;border-radius:50%;background:#fff;
+    box-shadow:0 2px 8px rgba(0,0,0,.5);cursor:pointer;
+  }
+  .vol span{font-size:12px;color:var(--tx2);width:22px;text-align:right;font-variant-numeric:tabular-nums}
+  .skipbtn,.lockbtn{padding:11px 14px;font-size:14px;font-weight:600;border-radius:12px;white-space:nowrap;flex:none}
+  .skipbtn{
+    background:linear-gradient(135deg,#f43f5e,#e11d48);color:#fff;
+    box-shadow:0 5px 18px rgba(244,63,94,.35);
+  }
+  .skipbtn .cnt{
+    display:inline-block;margin-left:5px;font-size:12px;background:rgba(0,0,0,.28);
+    border-radius:20px;padding:1px 7px;font-variant-numeric:tabular-nums;
+  }
+  .skipbtn.voted{background:linear-gradient(135deg,#7c3aed,#6d28d9);box-shadow:0 5px 18px rgba(124,58,237,.35)}
+  .lockbtn{
+    width:42px;height:42px;border-radius:12px;font-size:17px;line-height:1;padding:0;
+    background:rgba(255,255,255,.07);border:1px solid var(--card-br);color:var(--tx2);
+  }
+  .lockbtn.on{background:rgba(251,191,36,.16);border-color:rgba(251,191,36,.5);color:#fde68a}
+
+  /* ---------- 昵称门（新进来必须先起名，不能跳过） ---------- */
+  .gate{
+    position:fixed;inset:0;z-index:90;display:none;
+    align-items:center;justify-content:center;padding:20px;
+    background:radial-gradient(700px 420px at 50% 10%, rgba(139,92,246,.28), transparent 62%), rgba(9,7,20,.9);
+    backdrop-filter:blur(8px);
+  }
+  .gate.show{display:flex}
+  .gate .gbox{
+    width:100%;max-width:380px;background:#1b1730;border:1px solid var(--card-br);
+    border-radius:20px;padding:24px;box-shadow:0 24px 70px rgba(0,0,0,.65);text-align:center;
+  }
+  .gate .gico{font-size:34px;line-height:1;margin-bottom:12px}
+  .gate h3{margin:0 0 7px;font-size:17px}
+  .gate p{margin:0 0 15px;font-size:12.5px;color:var(--tx2);line-height:1.6}
+  .gate input{
+    width:100%;background:rgba(0,0,0,.3);border:1px solid var(--card-br);color:var(--tx);
+    border-radius:12px;padding:13px 14px;font-size:16px;text-align:center;letter-spacing:1px;
+  }
+  .gate input:focus{outline:none;border-color:var(--pri)}
+  .gate .gmsg{font-size:12.5px;min-height:17px;margin-top:9px;color:var(--err)}
+  .gate .gmsg.ok{color:var(--ok)}
+  .gate .btn{width:100%;margin-top:14px;padding:13px}
+
+  /* ---------- 管理员弹层 ---------- */
+  .modal{
+    position:fixed;inset:0;background:rgba(9,7,20,.72);backdrop-filter:blur(3px);
+    display:none;align-items:center;justify-content:center;z-index:70;padding:20px;overflow:auto;
+  }
+  .modal.show{display:flex}
+  .modal .box{
+    width:100%;max-width:360px;background:#1b1730;border:1px solid var(--card-br);
+    border-radius:18px;padding:20px;box-shadow:0 24px 60px rgba(0,0,0,.6);
+    /* 音源面板展开后弹层会变高，小屏（横屏手机）要能滚，别被切掉 */
+    max-height:calc(100vh - 40px);overflow:auto;
+  }
+  .modal h3{margin:0 0 6px;font-size:16px}
+  .modal p{margin:0 0 13px;font-size:12.5px;color:var(--tx2);line-height:1.6}
+  .modal input{
+    width:100%;box-sizing:border-box;background:rgba(0,0,0,.28);border:1px solid var(--card-br);
+    color:var(--tx);border-radius:11px;padding:12px 13px;font-size:15px;letter-spacing:2px;
+  }
+  .modal input+input{margin-top:9px}
+  .modal .row{display:flex;gap:9px;margin-top:14px}
+  .modal .row button{flex:1;border-radius:11px;padding:11px;font-size:14px;font-weight:600;border:0}
+  .modal .row .ghost{background:rgba(255,255,255,.08);color:var(--tx)}
+  .modal .row .pri{background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff}
+  .modal .msg{font-size:12.5px;margin-top:10px;min-height:16px;color:var(--err)}
+  /* 管理员：昵称占用管理 */
+  .modal .linkbtn{
+    background:none;border:0;color:var(--tx2);font-size:12.5px;padding:0;margin-top:12px;
+    text-decoration:underline;text-underline-offset:3px;cursor:pointer;
+  }
+  .modal .linkbtn:hover{color:var(--tx)}
+  .modal .nicklist{max-height:40vh;overflow:auto;margin-top:10px;border-top:1px solid var(--card-br)}
+  /* QQ 会员音源：状态 + 三个字段 + 三个按钮，塞在同一个弹层里不另开一个 */
+  .modal .qqstate{font-size:12px;line-height:1.6;color:var(--tx2);background:rgba(255,255,255,.05);
+    border-radius:10px;padding:9px 11px;margin-top:10px;word-break:break-all}
+  .modal select{width:100%;margin-top:9px;padding:11px 12px;border-radius:11px;
+    background:rgba(255,255,255,.06);border:1px solid var(--card-br);color:var(--tx);font-size:13.5px;
+    font-family:inherit;-webkit-appearance:none;appearance:none}
+  /* qm_keyst 有 90 来个字符，字距放宽会挤成一团，这个框单独收紧 */
+  .modal #amQQKey{letter-spacing:0;font-size:13px}
+  .modal #amQQUin{letter-spacing:1px}
+  .modal .row.three button{font-size:13px;padding:10px 6px}
+  .modal .nrow{display:flex;align-items:center;gap:9px;padding:9px 2px;border-bottom:1px solid rgba(255,255,255,.06)}
+  .modal .nrow:last-child{border-bottom:0}
+  .modal .nrow .nn{font-size:14px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .modal .nrow .nd{font-size:11px;color:var(--tx2);white-space:nowrap;text-align:right;line-height:1.45}
+  .modal .nrow .nrel{
+    background:rgba(244,63,94,.15);color:#fda4af;border:1px solid rgba(244,63,94,.35);
+    border-radius:9px;padding:6px 11px;font-size:12px;font-weight:600;cursor:pointer;flex:none;
+  }
+  .modal .nrow .nrel:hover{background:rgba(244,63,94,.26)}
+  .modal .nempty{padding:12px 2px;font-size:12.5px;color:var(--tx2)}
+
+  /* ---------- 定时关闭（睡眠定时器） ---------- */
+  .slbtn{display:flex;align-items:center;gap:5px;flex:0 0 auto;font-size:13px;
+    font-variant-numeric:tabular-nums;padding:8px 11px}
+  .slbtn.on{background:rgba(251,191,36,.16);border-color:rgba(251,191,36,.45);color:var(--warn)}
+  .slbtn.hold{background:rgba(248,113,113,.14);border-color:rgba(248,113,113,.42);color:var(--err)}
+  .slbtn #slTop:empty{display:none}
+  .slbtn #slTop{margin-left:1px}
+  .modal .slpreset{display:flex;gap:8px;margin-top:10px}
+  .modal .slpreset button{flex:1;padding:10px 0;font-size:13px;font-weight:600;border-radius:11px;
+    background:rgba(255,255,255,.08);color:var(--tx)}
+  .modal .slpreset button:hover{background:rgba(139,92,246,.35)}
+  .modal .slchk{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12.5px;color:var(--tx2);cursor:pointer}
+  .modal .slchk input{width:16px;height:16px;min-width:16px;margin:0;padding:0;accent-color:var(--pri)}
+  .modal .row button:disabled{opacity:.42;cursor:default;transform:none}
+  @media (max-width:520px){ .slbtn #slTop{font-size:11.5px} .modal .slpreset button{font-size:12px} }
+
+  /* ---------- 提示 ---------- */
+  #toast{
+    position:fixed;left:50%;bottom:calc(var(--dockh) + 14px);transform:translateX(-50%) translateY(18px);
+    background:rgba(24,20,45,.97);border:1px solid var(--card-br);color:var(--tx);
+    padding:11px 18px;border-radius:12px;font-size:13.5px;opacity:0;pointer-events:none;
+    transition:.25s;z-index:60;max-width:88vw;text-align:center;
+    box-shadow:0 10px 34px rgba(0,0,0,.55);
+  }
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  #toast.err{border-color:rgba(248,113,113,.45);color:#fecaca}
+  #toast.ok{border-color:rgba(52,211,153,.45);color:#a7f3d0}
+  #toast.warn{border-color:rgba(251,191,36,.45);color:#fde68a}
+
+  .spin{display:inline-block;width:15px;height:15px;border:2px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .banner{
+    background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.3);color:#fecaca;
+    /* margin-bottom 归零：它现在的间距由 .col 的 gap 统一给，留着会多顶出 14px */
+    border-radius:12px;padding:11px 13px;font-size:13px;margin-bottom:0;display:flex;gap:9px;align-items:flex-start;
+  }
+  .banner.warn{background:rgba(251,191,36,.1);border-color:rgba(251,191,36,.3);color:#fde68a}
+  .sk{height:14px;border-radius:7px;background:rgba(255,255,255,.06);animation:pl 1.4s ease-in-out infinite}
+  @keyframes pl{0%,100%{opacity:.5}50%{opacity:1}}
+
+  /* ---------- 中等宽度：三列还在，但聊天室收窄到能用的最小宽度 ---------- */
+  @media (max-width:1180px){
+    .cols{grid-template-columns:minmax(0,4fr) minmax(0,4fr) minmax(220px,3fr);gap:12px}
+  }
+
+  /* ---------- 窄屏：堆叠成单列，随便滚 ---------- */
+  @media (max-width:900px){
+    body{height:auto;min-height:100vh;overflow-x:hidden;overflow-y:auto;display:block;padding-bottom:var(--dockh)}
+    .cols{display:block;overflow:visible;padding:12px 14px 0}
+    .col,.col-m,.col-r{display:block;overflow:visible}
+    .col-l{padding-right:0}
+    /* display:block 后 gap 失效，把列内间距还给各块 */
+    .col > *{margin-top:14px}
+    .col > :first-child{margin-top:0}
+    .chatscroll{max-height:46vh}
+    #queue{max-height:none;overflow:visible}
+    .sub{max-width:30vw}
+    /* 顶栏在手机上要能塞下一整行：收紧每一段 */
+    .hd{gap:7px;padding:0 12px}
+    .logo{width:32px;height:32px;flex:0 0 32px;font-size:17px}
+    h1{font-size:15px}
+    .online{padding:5px 9px;font-size:12px}
+    .me{padding:4px 4px 4px 9px}
+    .me .nick{max-width:64px;font-size:12.5px}
+    .me button{width:24px;height:24px;font-size:12px}
+    .btn.sm{padding:8px 11px}
+    .btn{padding:12px 16px}
+  }
+  @media (max-width:430px){
+    .skipbtn .btxt{display:none}
+    .skipbtn{padding:11px 12px}
+    .online .lbl{display:none}
+    .sub{max-width:26vw}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hd">
+    <div class="logo">🎵</div>
+    <div style="min-width:0">
+      <h1>小爱点歌台</h1>
+      <div class="sub" id="engStat"><span class="dot" id="dot"></span><span id="engTxt">连接中…</span></div>
+    </div>
+    <div class="grow"></div>
+    <button class="btn ghost sm slbtn" id="btnSleep" title="定时关闭：到点自动停声">⏱<span id="slTop"></span></button>
+    <div class="online" id="onlineBox" title="聊天室在线人数">💬 <span id="onlineN">0</span><span class="lbl"> 人</span></div>
+    <div class="me">
+      <span class="nick" id="meNick">—</span>
+      <button id="btnRename" title="改昵称">✏️</button>
+    </div>
+    <button class="btn ghost sm" id="btnSetup" title="连接设置" style="flex:0 0 auto">⚙</button>
+  </div>
+</header>
+
+<div class="cols">
+  <!-- ============ 左列：搜索 + 播放列表 ============ -->
+  <div class="col col-l">
+    <div id="banner"></div>
+
+    <!-- 首次配置 -->
+    <div class="card" id="setupCard" style="display:none">
+      <h2>⚙️ 连接播放引擎</h2>
+      <div style="font-size:12.5px;color:var(--tx2);margin:-4px 0 11px">
+        点歌台要连上 songloft 才能把歌推给小爱音箱。填一次即可，配置存到 NAS 上；<b>密码只写给服务端，不会回传到本页面</b>。
+      </div>
+      <div class="searchbar" style="flex-wrap:wrap">
+        <input id="suBase" placeholder="songloft 地址，如 http://192.168.1.100:58091" style="flex:1 1 100%">
+        <input id="suUser" placeholder="账号（默认 admin）" style="flex:1 1 42%">
+        <input id="suPass" type="password" placeholder="密码" style="flex:1 1 42%">
+        <input id="suDev" placeholder="指定音箱 device_id（可留空，自动挑在线 Sound Pro）" style="flex:1 1 100%">
+        <button class="btn" id="suGo" style="flex:0 0 auto">保存并连接</button>
+      </div>
+      <div id="suMsg" style="margin-top:9px;font-size:12.5px;color:var(--tx2)"></div>
+    </div>
+
+    <!-- 搜索 -->
+    <div class="card">
+      <h2>🔍 点歌 <span class="n" id="libBadge" style="display:none">NAS 0 首</span></h2>
+      <div class="searchbar">
+        <input id="q" placeholder="歌名 / 歌手，回车搜索" autocomplete="off">
+        <button class="btn" id="btnSearch">搜索</button>
+      </div>
+      <div class="list" id="results"></div>
+    </div>
+
+    <!-- 排行榜（可折叠；数据来自 QQ 音乐榜单，默认缓存 30 分钟，断网时用缓存） -->
+    <div class="card" id="topCard">
+      <h2>🏆 排行榜 <span class="n" id="topMeta" style="display:none">—</span>
+        <span class="grow"></span>
+        <button class="btn ghost sm" id="btnTopToggle" style="margin-left:auto">展开</button>
+      </h2>
+      <div id="topBody" style="display:none">
+        <div class="searchbar">
+          <div class="selwrap" id="topSelWrap">
+            <button class="sel" id="topPickBtn" aria-haspopup="listbox" aria-expanded="false" title="选一个榜单">
+              <span class="seltxt" id="topPickTxt">选择榜单</span><span class="caret">▼</span>
+            </button>
+            <div class="selpop" id="topPickPop" role="listbox"></div>
+          </div>
+          <button class="btn ghost sm" id="btnTopRefresh" title="重新拉一次（绕过 30 分钟缓存）">刷新</button>
+        </div>
+        <div id="topTip" style="font-size:12px;color:var(--tx3);margin:8px 2px 0"></div>
+        <div class="list" id="topList"></div>
+      </div>
+    </div>
+
+    <!-- NAS 曲库 -->
+    <div class="card">
+      <h2>💾 NAS 曲库 <span class="n" id="libN">0</span>
+        <span class="grow"></span>
+        <button class="btn ghost sm" id="btnLibToggle" style="margin-left:auto">展开</button>
+      </h2>
+      <div style="font-size:12.5px;color:var(--tx2);margin:-4px 0 10px" id="libStat">
+        播放过的歌会自动存到 NAS，再点同一首歌就不用联网了。
+      </div>
+      <div id="libBody" style="display:none">
+        <div class="searchbar">
+          <input id="lq" placeholder="在曲库里搜（不联网）" autocomplete="off">
+          <button class="btn" id="btnLibSearch">搜本地</button>
+        </div>
+        <div class="list" id="libList"></div>
+        <div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">
+          <button class="btn ghost sm" id="btnLibRescan">🔄 重扫曲库目录</button>
+          <span style="font-size:11.5px;color:var(--tx3);align-self:center" id="libPath"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 中列：正在播放 + 待播放列表（两块都常驻，没歌时是占位） ============ -->
+  <div class="col col-m">
+    <!-- 正在播放 -->
+    <div class="card" id="nowCard">
+      <h2>🔊 正在播放</h2>
+      <div id="nowIdle" class="empty" style="display:none">
+        <span class="ico">🎵</span><span id="idleHead">现在没有在播放</span>
+        <div id="idleTip" style="margin-top:7px;font-size:12.5px;color:var(--tx3);line-height:1.55">去左边搜一首，点「＋」就会开始</div>
+      </div>
+      <div id="nowLive">
+        <div class="now">
+          <div class="cov" id="nowCov">🎵</div>
+          <div class="meta">
+            <div class="nm" id="nowName">—</div>
+            <div class="ar" id="nowArtist">—</div>
+            <div class="tags" id="nowTags"></div>
+          </div>
+        </div>
+        <div class="bar"><div id="nowBar"></div></div>
+        <div class="barinfo">
+          <span id="nowPos">--:--</span>
+          <span id="nowDur">--:--</span>
+        </div>
+        <div class="votebar" id="voteBar">
+          <div>
+            <div class="vtxt" id="voteTxt">想切歌？点右边投票</div>
+            <div class="vwho" id="voteWho"></div>
+          </div>
+          <button class="vbtn" id="btnVoteSkip">⏭ 投票切歌</button>
+          <!-- 停止：所有人都能按（不需要管理员口令）—— 掐断当前曲 + 清空待播 -->
+          <button class="vbtn stop" id="btnStop" title="停止播放（所有人都能用）">⏹ 到点了，停止播放吧</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 待播放列表 -->
+    <div class="card" id="queueCard">
+      <h2>📋 待播放 <span class="n" id="qn">0</span>
+        <span class="grow"></span>
+        <button class="btn ghost sm" id="btnClear" style="margin-left:auto">清空</button>
+      </h2>
+      <div class="list" id="queue"></div>
+    </div>
+  </div>
+
+  <!-- ============ 右列：聊天室（较窄） ============ -->
+  <div class="col col-r">
+    <!-- 聊天室 -->
+    <div class="chatcard">
+      <div class="chathead">
+        <h2>💬 聊天室</h2>
+        <span class="users" id="chatUsers">在线 0 人</span>
+      </div>
+      <div class="chatscroll" id="chatScroll">
+        <div class="empty"><span class="ico">💬</span>还没有人说话</div>
+      </div>
+      <div class="chatbar">
+        <input id="chatInput" placeholder="说点什么…（回车发送）" autocomplete="off" maxlength="300">
+        <button class="btn" id="btnSend">发送</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 底栏 -->
+<div class="dock">
+  <div class="in">
+    <div class="vol">
+      <span style="font-size:16px">🔈</span>
+      <input type="range" id="vol" min="0" max="100" value="15">
+      <span id="volTxt">15</span>
+    </div>
+    <button class="skipbtn" id="btnSkip">⏭ <span class="btxt">投票切歌</span><span class="cnt" id="skipCnt">0/1</span></button>
+    <button class="lockbtn" id="btnAdmin" title="管理员">🔒</button>
+  </div>
+</div>
+
+<!-- 昵称门：新进来必须先起个唯一昵称 -->
+<div class="gate" id="nickGate">
+  <div class="gbox">
+    <div class="gico">🎵</div>
+    <h3 id="gateTitle">先给自己起个昵称</h3>
+    <p id="gateDesc">聊天室里要靠昵称认人，所以昵称不能重复 —— 被别人用了就得换一个。</p>
+    <input id="gateNick" maxlength="12" placeholder="1-12 个字" autocomplete="off">
+    <div class="gmsg" id="gateMsg"></div>
+    <button class="btn" id="gateGo">进入点歌台</button>
+  </div>
+</div>
+
+<!-- 管理员弹层 -->
+<div class="modal" id="adminModal">
+  <div class="box">
+    <h3 id="amTitle">管理员</h3>
+    <p id="amDesc">只有管理员能停掉全场播放。</p>
+    <input id="amPin" type="password" inputmode="numeric" placeholder="管理员口令" autocomplete="off">
+    <input id="amPin2" type="password" inputmode="numeric" placeholder="再输一次确认" autocomplete="off" style="display:none">
+    <div class="msg" id="amMsg"></div>
+    <button class="linkbtn" id="amNickBtn" style="display:none">👥 管理昵称占用</button>
+    <div class="nicklist" id="amNickList" style="display:none"></div>
+    <button class="linkbtn" id="amQQBtn" style="display:none">🎵 QQ 会员音源</button>
+    <div id="amQQ" style="display:none">
+      <div class="qqstate" id="amQQState">—</div>
+      <input id="amQQKey" type="password" placeholder="qm_keyst（y.qq.com 登录后从 cookie 复制）" autocomplete="off">
+      <input id="amQQUin" inputmode="numeric" placeholder="QQ 号" autocomplete="off">
+      <select id="amQQQ">
+        <option value="320k">320k（推荐，音箱兼容最好）</option>
+        <option value="128k">128k（省空间）</option>
+        <option value="flac">FLAC 无损（约 5 倍体积）</option>
+      </select>
+      <div class="row three">
+        <button class="ghost" id="amQQClear">清除</button>
+        <button class="ghost" id="amQQTest">自测</button>
+        <button class="pri" id="amQQSave">保存</button>
+      </div>
+      <div class="msg" id="amQQMsg"></div>
+    </div>
+    <button class="linkbtn" id="amRadioBtn" style="display:none">🎲 随机电台</button>
+    <div id="amRadio" style="display:none">
+      <div class="qqstate" id="amRadioState">—</div>
+      <div class="row three">
+        <button class="ghost" id="amRadioToggle">关闭</button>
+        <button class="ghost" id="amRadioSkip">换一首</button>
+        <button class="ghost" id="amRadioClear">清黑名单</button>
+      </div>
+      <div class="msg" id="amRadioMsg"></div>
+    </div>
+    <div class="row">
+      <button class="ghost" id="amCancel">取消</button>
+      <button class="pri" id="amOk">确定</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="sleepModal">
+  <div class="box">
+    <h3>⏱ 定时关闭</h3>
+    <p>到点自动停声。<b>队列不会清空</b> —— 明早点一首歌，或按「继续播放」，就接着放。</p>
+    <div class="qqstate" id="slNow">未设定时</div>
+    <div class="slpreset">
+      <button data-min="15">15 分钟</button>
+      <button data-min="30">30 分钟</button>
+      <button data-min="60">1 小时</button>
+      <button data-min="90">1.5 小时</button>
+    </div>
+    <div class="row">
+      <input id="slMin" type="number" min="1" step="1" inputmode="numeric" placeholder="自定义分钟（1~720）">
+      <button class="pri" id="slMinGo" style="flex:0 0 74px">设定</button>
+    </div>
+    <div class="row">
+      <input id="slAt" type="time">
+      <button class="pri" id="slAtGo" style="flex:0 0 74px">到点关</button>
+    </div>
+    <label class="slchk"><input type="checkbox" id="slRepeat">每天重复（每天到这个点自动关）</label>
+    <div class="msg" id="slMsg"></div>
+    <div class="row three">
+      <button class="ghost" id="slResume">继续播放</button>
+      <button class="ghost" id="slCancel">取消定时</button>
+      <button class="ghost" id="slClose">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+
+// ---------- 身份：clientId（本机唯一） + 昵称 ----------
+const CID_KEY = 'jb_client_id';
+const NICK_KEY = 'jb_nick';
+let CID = localStorage.getItem(CID_KEY) || '';
+if (!CID) {
+  CID = (self.crypto && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  localStorage.setItem(CID_KEY, CID);
+}
+let myNick = localStorage.getItem(NICK_KEY) || '';
+/** 服务端确认过的昵称（和 myNick 一致才算"进了聊天室"） */
+let nickOk = false;
+
+function nick(){ return myNick || ''; }
+
+// ---------- 工具 ----------
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+/** 秒 → "7 天" / "12 小时" / "30 分钟"（昵称占用的自动释放文案用） */
+function ttlText(sec){
+  sec = Math.max(0, Math.round(sec || 0));
+  if (!sec) return '永不过期';
+  if (sec >= 86400) return `${Math.round(sec / 86400)} 天`;
+  if (sec >= 3600) return `${Math.round(sec / 3600)} 小时`;
+  if (sec >= 60) return `${Math.round(sec / 60)} 分钟`;
+  return `${sec} 秒`;
+}
+function fmtTime(sec){
+  sec = Math.max(0, Math.round(sec || 0));
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return `${m}:${String(s).padStart(2,'0')}`;
+}
+function fmtSize(b){
+  b = Number(b) || 0;
+  if (b >= 1073741824) return (b / 1073741824).toFixed(2) + ' GB';
+  if (b >= 1048576) return (b / 1048576).toFixed(1) + ' MB';
+  return Math.round(b / 1024) + ' KB';
+}
+function fmtDur(sec){
+  sec = Number(sec) || 0;
+  if (sec >= 3600) return (sec / 3600).toFixed(1) + ' 小时';
+  return Math.round(sec / 60) + ' 分钟';
+}
+function fmtClock(ms){
+  const d = new Date(ms || Date.now());
+  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+let toastTimer = null;
+function toast(msg, kind, ms){
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'show' + (kind ? ' ' + kind : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = ''; }, ms || (kind === 'warn' ? 5200 : 2600));
+}
+
+async function api(path, opt){
+  const r = await fetch(path, opt);
+  const ct = r.headers.get('content-type') || '';
+  const data = ct.includes('json') ? await r.json().catch(() => ({})) : await r.text();
+  if (!r.ok) throw new Error((data && data.error) || ('HTTP ' + r.status));
+  return data;
+}
+function post(path, body){
+  return api(path, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body || {}) });
+}
+
+// ---------- 昵称门 ----------
+let gateOpen = false;
+
+/** reason: 'first' 首次进入 | 'rename' 主动改名 | 'lost' 昵称被服务端判定失效 */
+function openGate(reason){
+  gateOpen = true;
+  $('gateTitle').textContent = reason === 'rename' ? '换个昵称' : '先给自己起个昵称';
+  const ttlSec = (LAST && LAST.nickTtlSec) || 0;
+  const ttlTip = ttlSec ? ` 名字被别人占着也别急 —— 原主人 ${ttlText(ttlSec)}没出现就会自动释放。` : '';
+  $('gateDesc').innerHTML = reason === 'first'
+    ? '聊天室里要靠昵称认人，所以昵称不能重复 —— 被别人用了就得换一个。' + ttlTip
+    : (reason === 'lost'
+      ? '这个昵称在服务端已经不属于你了（可能被别人占了，或原主人太久没用被回收了），重新起一个吧。'
+      : '改完昵称，聊天室里的记录和投票都会跟着新名字走。');
+  $('gateNick').value = reason === 'rename' ? (myNick || '') : '';
+  $('gateMsg').textContent = '';
+  $('gateMsg').className = 'gmsg';
+  $('nickGate').classList.add('show');
+  setTimeout(() => { try { $('gateNick').focus(); $('gateNick').select(); } catch(e){} }, 80);
+}
+function closeGate(){
+  gateOpen = false;
+  $('nickGate').classList.remove('show');
+}
+
+let checkTimer = null;
+let nickChecked = '';   // 上一次服务端确认可用的昵称
+$('gateNick').addEventListener('input', () => {
+  const v = $('gateNick').value.trim();
+  const msg = $('gateMsg');
+  msg.className = 'gmsg';
+  if (!v) { msg.textContent = ''; clearTimeout(checkTimer); return; }
+  if (v === nickChecked) { msg.textContent = '✅ 这个名字可以用'; msg.className = 'gmsg ok'; return; }
+  clearTimeout(checkTimer);
+  checkTimer = setTimeout(async () => {
+    try {
+      const r = await api('/api/nick/check?nick=' + encodeURIComponent(v) + '&clientId=' + encodeURIComponent(CID));
+      if ($('gateNick').value.trim() !== v) return; // 用户又改了
+      if (!r.valid) { msg.textContent = `昵称最多 ${r.maxLen} 个字`; return; }
+      if (r.taken) {
+        // 被别人占着 —— 如果那个名字快到期了，顺便说一句，省得白等
+        msg.textContent = r.releasesInSec > 0
+          ? `❌ 这个名字有人用了（原主人 ${ttlText(r.releasesInSec)}内没出现就会自动释放）`
+          : '❌ 这个名字已经有人用了';
+        return;
+      }
+      nickChecked = v;
+      msg.textContent = '✅ 这个名字可以用';
+      msg.className = 'gmsg ok';
+    } catch(e){ /* 查重失败不拦着提交，服务端还会再判一次 */ }
+  }, 380);
+});
+$('gateNick').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('gateGo').click(); });
+$('btnRename').onclick = () => openGate(myNick ? 'rename' : 'first');
+
+$('gateGo').onclick = async () => {
+  const v = $('gateNick').value.trim();
+  const msg = $('gateMsg');
+  const btn = $('gateGo');
+  if (!v) { msg.textContent = '昵称不能为空'; msg.className = 'gmsg'; return; }
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>';
+  msg.className = 'gmsg';
+  msg.textContent = '';
+  try {
+    const r = await post('/api/nick/claim', { clientId: CID, nick: v });
+    myNick = r.nick;
+    localStorage.setItem(NICK_KEY, myNick);
+    nickOk = true;
+    paintMe();
+    closeGate();
+    toast(`欢迎，${myNick}`, 'ok');
+    live();
+    refresh();
+  } catch (e) {
+    msg.className = 'gmsg';
+    msg.textContent = '❌ ' + e.message;
+    if (/有人用|已经/.test(e.message)) nickChecked = '';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '进入点歌台';
+  }
+};
+
+function paintMe(){
+  $('meNick').textContent = nickOk ? myNick : (myNick ? myNick + '（未确认）' : '—');
+}
+
+// ---------- 聊天室 ----------
+let chatSince = 0;
+let chatMsgs = [];
+let chatUsers = [];
+let chatAtBottom = true;
+
+// 进度条防跳用的缓存（服务端已做平滑，这里只是第二道保险）：
+// 同一首歌内接口偶发报 0 时，不要真的把进度条和秒数抹掉。
+let nowKey = '';       // 当前曲目的标识（换了就重置）
+let nowPosCache = 0;   // 这首歌见过的最大进度（秒）
+
+$('chatScroll').addEventListener('scroll', () => {
+  const el = $('chatScroll');
+  chatAtBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < 40;
+});
+
+function scrollChatToEnd(){
+  const el = $('chatScroll');
+  el.scrollTop = el.scrollHeight;
+}
+
+function renderChat(){
+  const box = $('chatScroll');
+  if (!chatMsgs.length) {
+    box.innerHTML = '<div class="empty"><span class="ico">💬</span>还没有人说话</div>';
+    return;
+  }
+  box.innerHTML = chatMsgs.map((m) => {
+    if (m.kind === 'sys') {
+      return `<div class="msg sys"><div class="bub"><div class="txt">${esc(m.text)}</div></div></div>`;
+    }
+    const mine = m.clientId === CID;
+    const ini = esc((m.nick || '?').slice(0, 1));
+    return `<div class="msg${mine ? ' me' : ''}">
+      ${mine ? '' : `<div class="avt">${ini}</div>`}
+      <div class="bub">
+        <div class="who">${esc(m.nick || '匿名')} · ${fmtClock(m.at)}</div>
+        <div class="txt">${esc(m.text)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderChatUsers(){
+  const el = $('chatUsers');
+  if (!chatUsers.length) { el.textContent = '等待有人进来…'; return; }
+  const names = chatUsers.map((u) => u.isMe ? '我(' + u.nick + ')' : u.nick).join('、');
+  el.textContent = `在线 ${chatUsers.length} 人：${names}`;
+  el.title = names;
+}
+
+async function live(){
+  // 还没起昵称 → 不心跳（不然会以"无昵称"混进在线列表）
+  if (gateOpen) return;
+  try {
+    const r = await post('/api/live', { clientId: CID, nick: myNick, since: chatSince });
+    if (r.needNick) {
+      nickOk = false;
+      paintMe();
+      openGate(myNick ? 'lost' : 'first');
+      return;
+    }
+    nickOk = true;
+    paintMe();
+
+    // 昵称被服务端规范化过（去了多余空格）→ 同步本地
+    if (r.me && r.me.nick && r.me.nick !== myNick) {
+      myNick = r.me.nick;
+      localStorage.setItem(NICK_KEY, myNick);
+      paintMe();
+    }
+
+    const inc = (r.msgs || []).filter((m) => m.id > chatSince);
+    if (inc.length) {
+      chatSince = inc[inc.length - 1].id;
+      chatMsgs = chatMsgs.concat(inc);
+      if (chatMsgs.length > 300) chatMsgs = chatMsgs.slice(-300);
+      renderChat();
+      if (chatAtBottom) scrollChatToEnd();
+    } else if (r.seq && r.seq < chatSince) {
+      // 服务端清过记录/重启换过 seq → 全量重来
+      chatSince = 0; chatMsgs = []; renderChat();
+    }
+
+    chatUsers = r.users || [];
+    renderChatUsers();
+    $('onlineN').textContent = r.online || 0;
+    paintVote(r.vote, r.online);
+  } catch (e) { /* 轮询失败静默，下一轮再试 */ }
+}
+
+async function sendChat(){
+  const inp = $('chatInput');
+  const text = inp.value.trim();
+  if (!text) return;
+  if (!nickOk) { openGate('first'); return; }
+  inp.value = '';
+  try {
+    await post('/api/chat/send', { clientId: CID, text });
+    chatAtBottom = true;
+    live();
+  } catch (e) {
+    inp.value = text;
+    toast('发送失败：' + e.message, 'err');
+  }
+}
+$('btnSend').onclick = sendChat;
+$('chatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat(); });
+
+// ---------- 投票切歌 ----------
+let lastVote = null;
+
+function paintVote(vote, online){
+  const v = vote || {};
+  lastVote = v;
+  const votedByMe = !!(v.voters || []).some((x) => x.clientId === CID);
+  const total = v.votes || 0;
+  const need = v.need || 1;
+
+  // 底栏按钮
+  const btn = $('btnSkip');
+  btn.classList.toggle('voted', votedByMe);
+  $('skipCnt').textContent = `${total}/${need}`;
+  btn.title = votedByMe ? '你已投票，再点一次撤票' : `投一票切歌（超过聊天室半数即切）`;
+
+  // 正在播放卡片里的投票条
+  const txt = $('voteTxt');
+  const who = $('voteWho');
+  if (!v.qid) {
+    txt.textContent = '当前没有在播的歌';
+    who.textContent = '';
+  } else if (v.enabled === false) {
+    txt.textContent = '投票切歌已关闭，点一下直接切';
+    who.textContent = '';
+  } else if (voteNeedIsOne(need)) {
+    txt.innerHTML = `切歌需要 <b>${need}</b> 票（现在 ${total} 票）`;
+    who.textContent = (v.voters || []).map((x) => x.nick).join('、');
+  } else {
+    const left = Math.max(0, need - total);
+    txt.innerHTML = left
+      ? `切歌还差 <b>${left}</b> 票（${total}/${need}）`
+      : `票数已够（${total}/${need}）`;
+    who.textContent = (v.voters || []).length ? '已投：' + (v.voters || []).map((x) => x.nick).join('、') : '';
+  }
+  $('btnVoteSkip').textContent = votedByMe ? '🗳 撤票' : '⏭ 投票切歌';
+  $('btnVoteSkip').classList.toggle('voted', votedByMe);
+}
+function voteNeedIsOne(n){ return n <= 1; }
+
+async function doSkip(){
+  if (!nickOk) { openGate('first'); return; }
+  const btn = $('btnVoteSkip');
+  btn.disabled = true;
+  try {
+    const r = await post('/api/skip', { clientId: CID, nick: myNick, pin: adminPin || '' });
+    if (r.mode === 'direct') toast('已切歌', 'ok');
+    else if (r.switched) toast('票数过半，已切歌', 'ok');
+    else {
+      const voted = (r.voters || []).some((x) => x.clientId === CID);
+      toast(voted ? `已投票 ${r.votes}/${r.need}，还差 ${Math.max(0, r.need - r.votes)} 票`
+                  : `已撤票，现在 ${r.votes}/${r.need}`, voted ? 'ok' : 'warn');
+    }
+    paintVote(r, r.online);
+    setTimeout(refresh, 300);
+  } catch (e) {
+    toast('切歌失败：' + e.message, 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+$('btnVoteSkip').onclick = doSkip;
+$('btnSkip').onclick = doSkip;
+
+// ---------- 搜索 ----------
+$('q').addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
+$('btnSearch').onclick = doSearch;
+
+let searching = false;
+async function doSearch(){
+  const kw = $('q').value.trim();
+  if (!kw) return toast('请输入歌名或歌手');
+  if (searching) return;
+  searching = true;
+  const btn = $('btnSearch');
+  btn.innerHTML = '<span class="spin"></span>';
+  btn.disabled = true;
+  $('results').innerHTML = Array.from({length:4}).map(() => `
+    <div class="row"><div class="cov"></div><div class="meta">
+      <div class="sk" style="width:58%"></div><div class="sk" style="width:34%;margin-top:7px;height:11px"></div>
+    </div><div style="width:36px"></div></div>`).join('');
+  try {
+    const d = await api('/api/search?q=' + encodeURIComponent(kw));
+    renderResults(d.results || [], d);
+  } catch (e) {
+    $('results').innerHTML = `<div class="empty"><span class="ico">😵</span>搜索失败：${esc(e.message)}</div>`;
+  } finally {
+    searching = false;
+    btn.textContent = '搜索';
+    btn.disabled = false;
+  }
+}
+
+function renderResults(list, meta){
+  if (!list.length) {
+    $('results').innerHTML = '<div class="empty"><span class="ico">🔎</span>没搜到，换个关键词试试</div>';
+    return;
+  }
+  const head = (meta && meta.warning
+      ? `<div style="font-size:12px;color:var(--warn);margin:2px 2px 4px">⏳ ${esc(meta.warning)}</div>` : '')
+    + ((meta && meta.localCount)
+      ? `<div style="font-size:12px;color:var(--ok);margin:2px 2px 4px">💾 ${meta.localCount} 首 NAS 里已经有，点歌秒播（不占音源额度）</div>`
+      : '');
+  $('results').innerHTML = head + list.map((s, i) => {
+    const cov = s.picId
+      ? `<img class="cov" loading="lazy" src="/api/cover?id=${encodeURIComponent(s.picId)}&source=${encodeURIComponent(s.source)}" onerror="this.outerHTML='<div class=&quot;cov&quot;>🎵</div>'">`
+      : `<div class="cov">🎵</div>`;
+    const tags = [];
+    if (s.local) tags.push('<span class="tag ok">NAS 曲库</span>');
+    else if (s.cached) tags.push('<span class="tag ok">已在 NAS · 秒播</span>');
+    tags.push(`<span class="tag${s.local ? '' : ' p'}">${esc(sourceName(s.source))}</span>`);
+    if (s.duration) tags.push(`<span class="tag">${fmtTime(s.duration)}</span>`);
+    if (s.album) tags.push(`<span class="tag">${esc(s.album)}</span>`);
+    return `<div class="row">
+      ${cov}
+      ${metaBlock(s.name, esc(s.artist || '未知歌手'), tags.join(''))}
+      <button class="add" data-i="${i}" title="点这首歌">＋</button>
+    </div>`;
+  }).join('');
+  $('results').querySelectorAll('.add').forEach(b => {
+    b.onclick = () => enqueue(list[+b.dataset.i], b);
+  });
+}
+
+// GD Studio 接口当前支持的源全集（2026-10 实测：netease 完整可用，joox/bilibili 只有搜索无直链）
+// 不在表里的源原样显示 id，避免维护一张永远对不上的映射
+const SOURCE_NAMES = { netease:'网易云', joox:'JOOX', bilibili:'B站', local:'本地曲库' };
+function sourceName(s){ return SOURCE_NAMES[s] || s; }
+
+/**
+ * 歌曲行的「歌名 / 歌手 / 标签」三件套 —— 搜索结果、NAS 曲库、待播放列表共用。
+ * @param artistHtml 歌手行内容（自带转义；待播放会拼上点歌人）
+ * @param tagsHtml   标签行内容
+ * @param extraHtml  插在标签行之后（只有待播放用它显示取源失败原因）
+ */
+function metaBlock(name, artistHtml, tagsHtml, extraHtml) {
+  return `<div class="meta">
+        <div class="nm">${esc(name)}</div>
+        <div class="ar">${artistHtml}</div>
+        <div class="tags">${tagsHtml}</div>
+        ${extraHtml || ''}
+      </div>`;
+}
+
+async function enqueue(song, btn){
+  if (!nickOk) { openGate('first'); return; }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span>'; }
+  try {
+    const r = await post('/api/enqueue', { song, requester: myNick });
+    const n = r && r.queueLength ? r.queueLength : 0;
+    if (r && r.cached) {
+      toast(`《${song.name}》NAS 里已有，立即播放`, 'ok');
+    } else {
+      const wait = r && r.cooldownLeftSec ? r.cooldownLeftSec : 0;
+      if (wait > 0) toast(`《${song.name}》已排队（第 ${n} 位）｜音源限流中，约 ${wait} 秒后自动开始`, 'warn');
+      else toast(`已加入播放列表（第 ${n} 位）：《${song.name}》`, 'ok');
+    }
+    refresh();
+    live();
+  } catch (e) {
+    toast('点歌失败：' + e.message, 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '＋'; }
+  }
+}
+
+// ---------- 排行榜（可折叠；数据来自 QQ 音乐榜单） ----------
+// 只加载"点歌"需要的东西：榜单名 + 曲目 + ＋按钮。
+// 数据是服务端缓存的（默认 30 分钟），展开才拉 —— 别拖慢首屏，也别白烧 QQ 请求。
+const TOP_OPEN_KEY = 'jb_top_open';
+const TOP_ID_KEY = 'jb_top_id';
+let topLists = null;      // 榜单列表（懒加载，拿到就一直用）
+let topLoading = false;
+
+function topOpenState(on){
+  $('topBody').style.display = on ? '' : 'none';
+  $('btnTopToggle').textContent = on ? '收起' : '展开';
+  localStorage.setItem(TOP_OPEN_KEY, on ? '1' : '0');
+}
+function topTip(html){ $('topTip').innerHTML = html || ''; }
+
+let topCurId = 0;
+let topCurTitle = '';
+
+/** 当前选中的榜（按钮文字 + 面板高亮 + 后续请求都用它） */
+function pickTop(id, title){
+  topCurId = Number(id) || 0;
+  topCurTitle = title || '';
+  $('topPickTxt').textContent = topCurTitle || '选择榜单';
+  $('topPickPop').querySelectorAll('.opt').forEach((o) => {
+    o.classList.toggle('on', Number(o.dataset.id) === topCurId);
+  });
+}
+function openTopPop(){
+  $('topPickPop').classList.add('on');
+  $('topPickBtn').setAttribute('aria-expanded', 'true');
+  const cur = $('topPickPop').querySelector('.opt.on');
+  if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest' });
+}
+function closeTopPop(){
+  $('topPickPop').classList.remove('on');
+  $('topPickBtn').setAttribute('aria-expanded', 'false');
+}
+
+function fillTopPick(lists){
+  const groups = new Map();
+  lists.forEach((x) => {
+    const g = x.group || '其他';
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g).push(x);
+  });
+  $('topPickPop').innerHTML = [...groups.entries()].map(([g, arr]) =>
+    `<div class="grp">${esc(g)}</div>`
+    + arr.map((x) => `<div class="opt" role="option" data-id="${x.topId}" data-title="${esc(x.title)}">${esc(x.title)}</div>`).join('')
+  ).join('');
+  $('topPickPop').querySelectorAll('.opt').forEach((o) => {
+    o.onclick = () => {
+      pickTop(o.dataset.id, o.dataset.title);
+      closeTopPop();
+      loadTopSongs(false);
+    };
+  });
+}
+
+async function loadTop(force){
+  if (topLoading) return;
+  if (localStorage.getItem(TOP_OPEN_KEY) !== '1') return;
+  topLoading = true;
+  const btn = $('btnTopRefresh');
+  if (force) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span>'; }
+  try {
+    if (!topLists || force) {
+      topTip('正在拉取榜单列表…');
+      const r = await api('/api/toplist' + (force ? '?force=1' : ''));
+      topLists = r.lists || [];
+      if (!topLists.length) throw new Error('没拿到榜单列表');
+      fillTopPick(topLists);
+      const want = Number(localStorage.getItem(TOP_ID_KEY)) || 26; // 默认热歌榜
+      const hit = topLists.find((x) => x.topId === want) || topLists[0];
+      pickTop(hit.topId, hit.title);
+    }
+    await loadTopSongs(force);
+  } catch (e) {
+    $('topList').innerHTML = '';
+    $('topMeta').style.display = 'none';
+    if (/QQ 音乐账号|qm_keyst/.test(e.message)) {
+      topTip('还没配 QQ 音乐账号 —— 点右下角 🔒 → 🎵 QQ 会员音源，填 qm_keyst 和 QQ 号后就能看榜。');
+    } else {
+      topTip('<span style="color:var(--err)">榜单加载失败：' + esc(e.message) + '</span>');
+    }
+  } finally {
+    topLoading = false;
+    btn.disabled = false;
+    btn.textContent = '刷新';
+  }
+}
+
+async function loadTopSongs(force){
+  const topId = topCurId;
+  if (!topId) return;
+  topTip('正在拉取曲目…');
+  try {
+    const r = await api('/api/toplist?topId=' + encodeURIComponent(topId) + (force ? '&force=1' : ''));
+    localStorage.setItem(TOP_ID_KEY, String(r.topId || topId));
+    renderTop(r);
+  } catch (e) {
+    $('topList').innerHTML = '';
+    topTip('<span style="color:var(--err)">' + esc(e.message) + '</span>');
+  }
+}
+
+function renderTop(d){
+  const songs = d.songs || [];
+  $('topMeta').style.display = '';
+  $('topMeta').textContent = (d.title || topCurTitle || '') + (d.updateTime ? ' · ' + d.updateTime : '');
+  const notes = [];
+  if (d.stale) notes.push('⚠️ QQ 暂时拉不到，先用上次缓存');
+  else if (d.cached) notes.push('缓存 ' + (d.ttlMin || 30) + ' 分钟内不重复请求');
+  if (notes.length) topTip(esc(notes.join(' · ')));
+  else topTip('');
+  if (!songs.length) {
+    $('topList').innerHTML = '<div class="empty"><span class="ico">🏆</span>这个榜单没有返回曲目</div>';
+    return;
+  }
+  $('topList').innerHTML = songs.map((s, i) => {
+    const tags = [];
+    if (s.cached) tags.push('<span class="tag ok">已在 NAS · 秒播</span>');
+    if (s.album) tags.push(`<span class="tag">${esc(s.album)}</span>`);
+    if (s.duration) tags.push(`<span class="tag">${fmtTime(s.duration)}</span>`);
+    return `<div class="row">
+      <div class="rk${i < 3 ? ' hot' : ''}">${s.rank || i + 1}</div>
+      ${metaBlock(s.name, esc(s.artist || '未知歌手'), tags.join(''))}
+      <button class="add" data-i="${i}" title="点这首歌">＋</button>
+    </div>`;
+  }).join('');
+  $('topList').querySelectorAll('.add').forEach((b) => {
+    b.onclick = () => enqueue(songs[+b.dataset.i], b);
+  });
+}
+
+$('btnTopToggle').onclick = () => {
+  const willOpen = $('topBody').style.display === 'none';
+  topOpenState(willOpen);
+  if (willOpen) loadTop();
+};
+$('topPickBtn').onclick = (e) => {
+  e.stopPropagation();
+  if ($('topPickPop').classList.contains('on')) closeTopPop();
+  else openTopPop();
+};
+// 点面板外面 / 按 Esc 关掉
+document.addEventListener('click', (e) => {
+  if (!$('topSelWrap').contains(e.target)) closeTopPop();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeTopPop();
+});
+$('btnTopRefresh').onclick = () => loadTop(true);
+// 恢复上次的展开状态（默认收起：首屏别被网络请求拖住）
+topOpenState(localStorage.getItem(TOP_OPEN_KEY) === '1');
+if (localStorage.getItem(TOP_OPEN_KEY) === '1') loadTop();
+
+// ---------- 状态渲染 ----------
+let LAST = null;
+
+async function refresh(){
+  let d;
+  try {
+    d = await api('/api/state');
+    LAST = d;
+    // 定时关闭：用服务端 leftSec 校准本地倒计时（每秒递减由 paintSleep 自己走）
+    syncSleep(d.sleep);
+    // 管理员弹层里的音源面板开着就跟着刷新状态
+    if ($('amQQ').style.display !== 'none') paintQQ();
+    if ($('amRadio').style.display !== 'none') paintRadio();
+  } catch {
+    $('dot').className = 'dot off';
+    $('engTxt').textContent = '服务未响应';
+    return;
+  }
+
+  // 引擎状态
+  const ok = d.engineOk;
+  $('dot').className = 'dot ' + (ok ? 'on' : 'off');
+  $('engTxt').textContent = ok
+    ? `已连接 · ${d.device ? d.device.name : '音箱'}${d.device && d.device.hardware ? ' [' + d.device.hardware + ']' : ''}`
+    : (d.engineErr || '播放引擎未就绪');
+
+  // 警告条
+  let banner = '';
+  if (!ok) {
+    banner = `<div class="banner">⚠️ 播放引擎未就绪：${esc(d.engineErr || '未配置')}
+      <button class="btn ghost sm" id="btnRetry" style="margin-left:auto;flex:0 0 auto">重试</button></div>`;
+  } else if (d.devices && d.devices.length && !d.devices.some(x => x.managed)) {
+    banner = `<div class="banner warn">⚠️ 音箱未启用设备管理，请在 songloft「智能音箱」页面勾选。</div>`;
+  } else if (d.notice) {
+    const isErr = d.notice.level === 'err';
+    banner = `<div class="banner${isErr ? '' : ' warn'}">${isErr ? '⛔' : '⏳'} ${esc(d.notice.text)}</div>`;
+  }
+  const bEl = $('banner');
+  if (bEl.innerHTML !== banner) {
+    bEl.innerHTML = banner;
+    const rb = $('btnRetry');
+    if (rb) rb.onclick = async () => {
+      rb.innerHTML = '<span class="spin"></span>';
+      try { await api('/api/engine/retry', {method:'POST'}); } catch {}
+      setTimeout(refresh, 600);
+    };
+  }
+
+  // 首次配置引导
+  fillSetup(d);
+  if (d.needSetup) showSetup(true);
+
+  // 在线人数 / 投票（state 里也有，live 拿不到时兜底）
+  if (typeof d.online === 'number') $('onlineN').textContent = d.online;
+  if (d.vote) paintVote(d.vote, d.online);
+
+  // NAS 曲库概况
+  const lib = d.library || { count: 0, bytes: 0, durationSec: 0, dir: '' };
+  $('libN').textContent = lib.count;
+  const badge = $('libBadge');
+  badge.style.display = lib.count ? '' : 'none';
+  badge.textContent = `NAS ${lib.count} 首`;
+  $('libStat').innerHTML = lib.count
+    ? `已缓存 <b style="color:var(--tx)">${lib.count}</b> 首 · 占 ${fmtSize(lib.bytes)}`
+      + (lib.durationSec ? ` · 约 ${fmtDur(lib.durationSec)}` : '')
+      + (d.preferCache === false ? ' <span style="color:var(--warn)">（缓存优先已关）</span>' : '')
+    : '播放过的歌会自动存到 NAS，再点同一首歌就不用联网了。';
+  $('libPath').textContent = lib.dir || '';
+  if (libOpen && lib.count !== libShown) loadLibrary($('lq').value.trim(), { silent: true });
+
+  // 正在播放（卡片常驻：没歌时切到占位，不隐藏整张卡）
+  const c = d.current;
+  if (c) {
+    $('nowIdle').style.display = 'none';
+    $('nowLive').style.display = '';
+    $('nowName').textContent = c.name;
+    $('nowArtist').textContent = c.artist || '未知歌手';
+    const tags = [];
+    tags.push(`<span class="tag">${esc(sourceName(c.source))}</span>`);
+    // 随机电台是系统自己挑的，别写成"随机电台 点的"
+    if (c.radio) tags.push('<span class="tag p">🎲 随机电台</span>');
+    else if (c.requester) tags.push(`<span class="tag p">${esc(c.requester)} 点的</span>`);
+    if (c.fromCache) tags.push('<span class="tag ok">本地缓存</span>');
+    if (c.status === 'playing') tags.push('<span class="tag ok">播放中</span>');
+    else if (c.status === 'downloading') tags.push('<span class="tag w">下载中 ' + (c.progress|0) + '%</span>');
+
+    const st = d.status || {};
+    const totalSec = (st.duration > 0 && (!c.duration || st.duration >= c.duration * 0.5))
+      ? st.duration : (c.duration || 0);
+
+    // 同一首歌内进度只增不减：接口偶尔报 0（idle 闪烁）时沿用缓存值，不让进度条来回跳。
+    const songKey = c.qid || c.name;
+    if (songKey !== nowKey) { nowKey = songKey; nowPosCache = 0; }
+    let posSec = st.position || 0;
+    if (posSec <= 0 && nowPosCache > 0 && c.status === 'playing') posSec = nowPosCache;
+    else if (posSec > nowPosCache) nowPosCache = posSec;
+
+    const pct = totalSec > 0
+      ? Math.min(100, (posSec / totalSec) * 100)
+      : (c.status === 'playing' ? 6 : (c.progress | 0) * .6);
+    $('nowBar').style.width = Math.max(2, pct) + '%';
+    // 知道总时长之后就显示具体秒数（起播时是 0:00），不再闪 --:--
+    $('nowPos').textContent = (totalSec > 0 || posSec > 0) ? fmtTime(posSec) : '--:--';
+    $('nowDur').textContent = totalSec ? fmtTime(totalSec) : '--:--';
+    if (c.duration > 0) tags.push(`<span class="tag">时长 ${fmtTime(c.duration)}</span>`);
+    $('nowTags').innerHTML = tags.join('');
+  } else {
+    const r = d.radio || {};
+    $('nowIdle').style.display = '';
+    $('nowLive').style.display = 'none';
+    // 有电台兜底时"现在没有在播放"只是一瞬间的事，别让用户以为坏了
+    const picking = r.on !== false && !r.paused && r.libCount > 0;
+    $('idleHead').textContent = picking ? '马上就来' : '现在没有在播放';
+    $('idleTip').textContent = r.on === false
+      ? '去左边搜一首，点「＋」就会开始'
+      : (r.paused
+        ? ((d.stop && d.stop.by ? `刚才 ${d.stop.by} 按了停止` : '随机电台暂停中') + ' —— 点一首歌就会恢复')
+        : (r.libCount ? '随机电台正在挑下一首…' : 'NAS 曲库还是空的，先点几首攒起来'));
+  }
+
+  // 播放列表
+  $('qn').textContent = d.queue.length;
+  if (!d.queue.length) {
+    const r = d.radio || {};
+    const cooling = d.cooldownLeftSec > 0;
+    // 队列空时的解释优先级：限流 > 别的提示 > 电台状态。
+    // 这一句很关键：否则用户看到"队列空了"会以为坏了，其实是电台在接手。
+    const why = cooling
+      ? `音源正在限流，约 ${d.cooldownLeftSec} 秒后自动恢复`
+      : (d.notice ? esc(d.notice.text)
+        : (r.available ? `队列播空就会自动随机播放 NAS 曲库（${r.libCount} 首），想听什么直接点也一样优先`
+          : (r.on === false ? '随机电台已关闭，队列播完就停'
+            : (r.paused ? '随机电台暂停中 —— 点一首歌就会恢复'
+              : (r.libCount ? '' : 'NAS 曲库还是空的，点几首歌攒起来就会自动循环了')))));
+    const ico = cooling ? '⏳' : (r.available ? '🎲' : '🎧');
+    const head = r.available && !cooling ? '队列空了，随机电台接手' : '播放列表暂时是空的';
+    $('queue').innerHTML = why
+      ? `<div class="empty"><span class="ico">${ico}</span>${head}
+           <div style="margin-top:7px;font-size:12.5px;color:var(--tx3);line-height:1.55">${why}</div>
+         </div>`
+      : `<div class="empty"><span class="ico">${ico}</span>还没人点歌，搜一首吧</div>`;
+  } else {
+    $('queue').innerHTML = d.queue.map((q, i) => {
+      const retrying = q.status === 'pending' && q.tries > 0;
+      const waiting = retrying && d.retryInSec > 0;
+      let tagCls, tagTxt;
+      if (q.status === 'ready') { tagCls = 'ok'; tagTxt = '已就绪'; }
+      else if (q.status === 'failed') { tagCls = 'e'; tagTxt = '失败'; }
+      else if (q.status === 'prefetching') { tagCls = 'w'; tagTxt = '预热中'; }
+      else if (q.status === 'downloading') { tagCls = 'w'; tagTxt = '下载中'; }
+      else if (retrying) {
+        tagCls = 'w';
+        tagTxt = waiting ? `等待重试 · ${d.retryInSec}s（第 ${q.tries + 1}/${d.maxTries || 5} 次）`
+                         : `重试中（第 ${q.tries + 1}/${d.maxTries || 5} 次）`;
+      } else { tagCls = ''; tagTxt = '排队中'; }
+      const why = retrying && q.lastError
+        ? `<div class="ar" style="color:#fde68a;margin-top:3px">取音源失败：${esc(q.lastError)}</div>` : '';
+      const cacheTag = q.cached ? '<span class="tag ok">已在 NAS</span>' : '';
+      return `<div class="row">
+        <div class="idx">${i + 1}</div>
+        ${metaBlock(q.name,
+        esc(q.artist || '未知歌手') + (q.requester ? ' · ' + esc(q.requester) + ' 点' : ''),
+        cacheTag + `<span class="tag ${tagCls}">${tagTxt}</span>`,
+        why)}
+        <button class="mini top${(q.tops && q.tops.voters || []).includes(CID) ? ' voted' : ''}" data-top="${esc(q.qid)}"
+          title="点赞：凑够 ${d.queueTopNeed || 3} 个人就往前挪一位（再点一次撤赞）">👍 ${(q.tops && q.tops.votes) || 0}/${d.queueTopNeed || 3}</button>
+      </div>`;
+    }).join('');
+    $('queue').querySelectorAll('[data-top]').forEach(b => {
+      b.onclick = async () => {
+        if (!nickOk) { openGate('first'); return; }
+        b.disabled = true;
+        try {
+          const r = await post('/api/top', { qid: b.dataset.top, clientId: CID });
+          if (r.moved) toast(`👍 凑够 ${r.need} 个赞，已往前挪到第 ${r.index + 1} 位`, 'ok');
+          else if (r.voted) toast(r.first ? `已点赞 ${r.votes}/${r.need}（它已经在最前面了）` : `已点赞 ${r.votes}/${r.need}，还差 ${Math.max(0, r.need - r.votes)} 个`, 'ok');
+          else toast(`已撤赞，现在 ${r.votes}/${r.need}`, 'warn');
+          refresh();
+        } catch (e) {
+          toast('点赞失败：' + e.message, 'err');
+          b.disabled = false;
+        }
+      };
+    });
+  }
+}
+
+// ---------- NAS 曲库面板 ----------
+let libOpen = false;
+let libShown = -1;
+let libItems = [];
+
+$('btnLibToggle').onclick = () => {
+  libOpen = !libOpen;
+  $('libBody').style.display = libOpen ? '' : 'none';
+  $('btnLibToggle').textContent = libOpen ? '收起' : '展开';
+  if (libOpen) loadLibrary('');
+};
+
+$('btnLibSearch').onclick = () => loadLibrary($('lq').value.trim());
+$('lq').addEventListener('keydown', (e) => { if (e.key === 'Enter') loadLibrary($('lq').value.trim()); });
+
+$('btnLibRescan').onclick = async () => {
+  const b = $('btnLibRescan');
+  b.disabled = true;
+  b.innerHTML = '<span class="spin"></span>';
+  try {
+    const r = await api('/api/library/rescan', { method: 'POST' });
+    toast(`重扫完成，曲库共 ${r.count} 首`, 'ok');
+    loadLibrary($('lq').value.trim());
+  } catch (e) { toast('重扫失败：' + e.message, 'err'); }
+  finally { b.disabled = false; b.textContent = '🔄 重扫曲库目录'; }
+};
+
+async function loadLibrary(q, opt){
+  const box = $('libList');
+  if (!(opt && opt.silent)) box.innerHTML = '<div class="empty"><span class="spin"></span> 读取曲库…</div>';
+  try {
+    const d = await api('/api/library?limit=300' + (q ? '&q=' + encodeURIComponent(q) : ''));
+    libItems = d.items || [];
+    libShown = (d.stats && d.stats.count) || libItems.length;
+    renderLibrary(d, q);
+  } catch (e) {
+    box.innerHTML = `<div class="empty"><span class="ico">😵</span>读取曲库失败：${esc(e.message)}</div>`;
+  }
+}
+
+function renderLibrary(d, q){
+  const list = d.items || [];
+  const box = $('libList');
+  if (!list.length) {
+    box.innerHTML = q
+      ? '<div class="empty"><span class="ico">💾</span>曲库里没有匹配的歌</div>'
+      : '<div class="empty"><span class="ico">💾</span>曲库还是空的<br><span style="font-size:12.5px">播放过的歌会自动存进来</span></div>';
+    return;
+  }
+  box.innerHTML = list.map((s, i) => {
+    const tags = [];
+    tags.push(`<span class="tag ${s.origin === 'download' ? 'ok' : ''}">${s.origin === 'download' ? '播放时缓存' : '手动放入'}</span>`);
+    tags.push(`<span class="tag">${esc((s.ext || '').toUpperCase())}</span>`);
+    if (s.duration) tags.push(`<span class="tag">${fmtTime(s.duration)}</span>`);
+    tags.push(`<span class="tag">${fmtSize(s.size)}</span>`);
+    if (s.plays) tags.push(`<span class="tag">播过 ${s.plays} 次</span>`);
+    return `<div class="row">
+      <div class="cov">💾</div>
+      ${metaBlock(s.name, esc(s.artist || '未知歌手'), tags.join(''))}
+      <button class="add" data-p="${i}" title="立即播放（不联网）">＋</button>
+      <button class="mini danger" data-d="${i}" title="从 NAS 删除这个文件">✕</button>
+    </div>`;
+  }).join('');
+
+  box.querySelectorAll('[data-p]').forEach(b => {
+    b.onclick = () => {
+      const s = libItems[+b.dataset.p];
+      enqueue({ source:'local', localKey:s.key, id:s.id, urlId:s.key, name:s.name, artist:s.artist, album:s.album, duration:s.duration }, b);
+    };
+  });
+  box.querySelectorAll('[data-d]').forEach(b => {
+    b.onclick = async () => {
+      const s = libItems[+b.dataset.d];
+      if (!confirm(`从 NAS 删除《${s.name}》？\n文件：${s.file}\n\n删掉后下次点这首歌要重新联网下载。`)) return;
+      b.disabled = true;
+      try {
+        const r = await post('/api/library/delete', { key: s.key });
+        toast(`已删除《${s.name}》，释放 ${fmtSize(r.freed || s.size)}`, 'ok');
+        loadLibrary($('lq').value.trim());
+        refresh();
+      } catch (e) { toast('删除失败：' + e.message, 'err'); b.disabled = false; }
+    };
+  });
+}
+
+// ---------- 连接设置 ----------
+let setupOpen = false;
+
+function fillSetup(d){
+  if (!$('suBase').value && d.engineBase) $('suBase').value = d.engineBase;
+  if (!$('suUser').value && d.engineUser) $('suUser').value = d.engineUser;
+  if (!$('suDev').value && d.engineDeviceId) $('suDev').value = d.engineDeviceId;
+}
+function showSetup(on){
+  setupOpen = on;
+  $('setupCard').style.display = on ? '' : 'none';
+}
+$('btnSetup').onclick = () => {
+  showSetup(!setupOpen);
+  if (setupOpen && LAST) fillSetup(LAST);
+  if (setupOpen) $('setupCard').scrollIntoView({behavior:'smooth', block:'nearest'});
+};
+$('suGo').onclick = async () => {
+  const msg = $('suMsg');
+  const base = $('suBase').value.trim();
+  const username = $('suUser').value.trim();
+  const password = $('suPass').value;
+  if (!base || !username || !password) {
+    msg.innerHTML = '<span style="color:var(--err)">地址 / 账号 / 密码都要填</span>';
+    return;
+  }
+  const btn = $('suGo');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>';
+  msg.textContent = '正在连接 songloft 并读取设备…';
+  try {
+    const r = await post('/api/setup', { base, username, password, deviceId: $('suDev').value.trim() });
+    $('suPass').value = '';
+    const dev = r.device;
+    msg.innerHTML = `<span style="color:var(--ok)">✅ 已连接，读到 ${r.devices ? r.devices.length : 0} 台设备`
+      + (dev ? `，播放目标：${esc(dev.name)}${dev.hardware ? ' [' + esc(dev.hardware) + ']' : ''}` : '') + '</span>';
+    toast('播放引擎已连接', 'ok');
+    setTimeout(() => { showSetup(false); refresh(); }, 1200);
+  } catch (e) {
+    msg.innerHTML = '<span style="color:var(--err)">❌ ' + esc(e.message) + '</span>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '保存并连接';
+  }
+};
+
+// ---------- 队列控制 ----------
+$('btnClear').onclick = async () => {
+  if (!confirm('确定清空播放列表？')) return;
+  try { await api('/api/clear', {method:'POST'}); refresh(); toast('播放列表已清空'); }
+  catch(e){ toast(e.message,'err'); }
+};
+
+// ---------- 管理员（口令只负责"直接切歌 / 昵称管理 / 音源设置"） ----------
+// 「停止全场」已经开放给所有人（#btnStop 在「正在播放」卡片里，不需要口令），所以这里不再控制它。
+const ADMIN_KEY = 'jb_admin_pin';
+let adminPin = localStorage.getItem(ADMIN_KEY) || '';
+let amMode = 'unlock';
+
+function paintAdmin(){
+  const on = !!adminPin;
+  $('btnAdmin').classList.toggle('on', on);
+  $('btnAdmin').textContent = on ? '🔓' : '🔒';
+  $('btnAdmin').title = on ? '管理员已解锁（切歌也可直接切）—— 点一下锁定' : '管理员';
+  // 管理员解锁后：切歌按钮说明也变一下
+  if (lastVote) paintVote(lastVote);
+}
+
+async function openAdminModal(){
+  let configured = !!(LAST && LAST.adminConfigured);
+  if (!LAST) {
+    try { configured = !!(await api('/api/admin/status')).configured; } catch {}
+  }
+  amMode = configured ? 'unlock' : 'setup';
+  $('amTitle').textContent = amMode === 'setup' ? '设置管理员口令' : '管理员验证';
+  $('amDesc').textContent = amMode === 'setup'
+    ? '口令只用来做「直接切歌（不投票）、管理昵称占用、换音源凭据」—— 「停止播放」所有人都能按，不需要口令。'
+    : '这里解的是管理权限：直接切歌、管理昵称占用、换音源凭据。（「停止全场」所有人都能按，不用口令。）';
+  $('amPin2').style.display = amMode === 'setup' ? '' : 'none';
+  $('amOk').textContent = amMode === 'setup' ? '设置并解锁' : '解锁';
+  $('amPin').value = ''; $('amPin2').value = ''; $('amMsg').textContent = '';
+  // 昵称管理只在"已经设过口令"时才有意义（要先验口令）
+  $('amNickBtn').style.display = configured ? '' : 'none';
+  $('amNickList').style.display = 'none';
+  $('amNickList').innerHTML = '';
+  // QQ 音源同理：换 key 是要口令的操作
+  $('amQQBtn').style.display = configured ? '' : 'none';
+  $('amQQ').style.display = 'none';
+  $('amQQMsg').textContent = '';
+  // 随机电台也是"要不要让它在没人点歌时自己响"的场控开关
+  $('amRadioBtn').style.display = configured ? '' : 'none';
+  $('amRadio').style.display = 'none';
+  $('amRadioMsg').textContent = '';
+  $('adminModal').classList.add('show');
+  setTimeout(() => { try { $('amPin').focus(); } catch {} }, 60);
+}
+function closeAdminModal(){ $('adminModal').classList.remove('show'); }
+
+$('btnAdmin').onclick = () => {
+  if (adminPin) {
+    adminPin = '';
+    localStorage.removeItem(ADMIN_KEY);
+    paintAdmin();
+    toast('已锁定管理员');
+    return;
+  }
+  openAdminModal().catch(() => {});
+};
+$('amCancel').onclick = closeAdminModal;
+$('adminModal').onclick = (e) => { if (e.target === $('adminModal')) closeAdminModal(); };
+
+// 昵称占用管理：TTL 到期会自动释放，但那是好几天后；
+// 家里人换手机/清了浏览器数据想马上拿回旧名字，就在这里手动放掉。
+$('amNickBtn').onclick = async () => {
+  const pin = $('amPin').value.trim();
+  const msg = $('amMsg');
+  if (pin.length < 4) { msg.textContent = '先填上面的口令，再点这里'; return; }
+  msg.textContent = '';
+  try {
+    renderNickList(await post('/api/admin/nicks', { pin }));
+  } catch (e) {
+    msg.textContent = '❌ ' + e.message;
+  }
+};
+
+// ---------- QQ 会员音源（管理员区）----------
+// 为什么放在这里：公共音源（GD）5 分钟只给 50 次请求，一家人点歌很容易撞线；
+// 用自己的 QQ 会员 cookie 直连官方接口就没有这个量的问题。key 会过期，所以留个能自己换的入口。
+function qqStateText(q){
+  if (!q) return '音源状态读取中…';
+  if (!q.configured) return '未配置 —— 现在走网易云公共源，多人同时点歌可能会被限流。';
+  const when = q.lastOkAt ? new Date(q.lastOkAt).toLocaleString('zh-CN', { hour12: false }) : '还没有成功记录';
+  const broken = q.broken ? ' ｜ ⚠️ 已熔断（key 可能过期，或会员掉了）' : '';
+  const err = q.lastErr ? ` ｜ 最近错误：${q.lastErr}` : '';
+  return `已配置 ${q.uin} · ${q.quality} ｜ 最近成功 ${when}${broken}${err}`;
+}
+function paintQQ(){
+  const d = LAST || {};
+  $('amQQState').textContent = qqStateText(d.qq);
+  if (d.qq && d.qq.quality) $('amQQQ').value = d.qq.quality;
+}
+
+// ---------- 随机电台（管理员区）----------
+// 队列播空时自动从 NAS 曲库随机挑一首接着放。
+// 只放**已经下载到 NAS 的歌**（不碰音源、不烧配额），所以不限量、也不怕限流。
+function radioStateText(r){
+  if (!r) return '状态读取中…';
+  const lib = `曲库 ${r.libCount} 首`;
+  if (!r.on) return `已关闭 —— 队列播完就安静。${lib}`;
+  if (r.paused) return `已开启 · 暂停中（管理员按过「停止」，点一首歌就会恢复）｜ ${lib}`;
+  if (!r.libCount) return '已开启，但曲库还是空的 —— 先点几首攒一攒';
+  if (!r.available) return `已开启 · 退避中，约 ${r.holdSec} 秒后再试｜ ${lib}`;
+  return `已开启 · 队列空了自动放，${lib}${r.badCount ? `（跳过 ${r.badCount} 首坏文件）` : ''}`;
+}
+function paintRadio(){
+  const d = LAST || {};
+  $('amRadioState').textContent = radioStateText(d.radio);
+  $('amRadioToggle').textContent = d.radio && d.radio.on ? '关闭' : '开启';
+}
+
+$('amRadioBtn').onclick = () => {
+  const pin = $('amPin').value.trim();
+  if (pin.length < 4) { $('amMsg').textContent = '先填上面的口令，再点这里'; return; }
+  $('amMsg').textContent = '';
+  const box = $('amRadio');
+  box.style.display = box.style.display === 'none' ? '' : 'none';
+  if (box.style.display !== 'none') paintRadio();
+};
+
+$('amRadioToggle').onclick = async () => {
+  const pin = $('amPin').value.trim();
+  const msg = $('amRadioMsg');
+  const on = !(LAST && LAST.radio && LAST.radio.on);
+  msg.textContent = '';
+  try {
+    const r = await post('/api/admin/radio', { pin, on });
+    LAST.radio = r.radio;
+    paintRadio();
+    msg.textContent = on ? '✅ 已开启：队列播空会自动随机播放 NAS 曲库' : '✅ 已关闭：队列播完就停';
+  } catch (e) { msg.textContent = '❌ ' + e.message; }
+};
+
+$('amRadioSkip').onclick = async () => {
+  const pin = $('amPin').value.trim();
+  const msg = $('amRadioMsg');
+  msg.textContent = '';
+  try {
+    const r = await post('/api/admin/radio', { pin, skip: true });
+    LAST.radio = r.radio;
+    paintRadio();
+    toast('已换一首');
+  } catch (e) { msg.textContent = '❌ ' + e.message; }
+};
+
+$('amRadioClear').onclick = async () => {
+  const pin = $('amPin').value.trim();
+  const msg = $('amRadioMsg');
+  try {
+    const r = await post('/api/admin/radio', { pin, clearBad: true });
+    LAST.radio = r.radio;
+    paintRadio();
+    msg.textContent = '✅ 坏文件黑名单已清空，下次会重新尝试';
+  } catch (e) { msg.textContent = '❌ ' + e.message; }
+};
+
+$('amQQBtn').onclick = () => {
+  const pin = $('amPin').value.trim();
+  if (pin.length < 4) { $('amMsg').textContent = '先填上面的口令，再点这里'; return; }
+  $('amMsg').textContent = '';
+  const box = $('amQQ');
+  box.style.display = box.style.display === 'none' ? '' : 'none';
+  if (box.style.display !== 'none') paintQQ();
+};
+
+$('amQQSave').onclick = async () => {
+  const pin = $('amPin').value.trim();
+  const msg = $('amQQMsg');
+  const key = $('amQQKey').value.trim();
+  const uin = $('amQQUin').value.trim();
+  if (pin.length < 4) { msg.textContent = '先填上面的口令'; return; }
+  if (!key && !uin) { msg.textContent = 'QQ 号和 qm_keyst 至少填一个（只改音质就不用填）'; return; }
+  msg.style.color = '';
+  msg.textContent = '保存并测试中…（会真的搜一首、取一次直链）';
+  try {
+    const r = await post('/api/admin/qq', { pin, key, uin, quality: $('amQQQ').value });
+    const t = r.test || {};
+    if (t.ok) {
+      msg.style.color = 'var(--ok,#3ddc84)';
+      msg.textContent = `✅ 通了：${t.song || ''} ${t.quality || ''} ${t.format || ''}（${t.ms}ms）`;
+      $('amQQKey').value = '';
+      $('amQQUin').value = '';
+    } else {
+      msg.style.color = '';
+      msg.textContent = '⚠️ 已保存，但测试没过：' + (t.detail || '未知原因');
+    }
+    refresh();
+    if (r.qq) $('amQQState').textContent = qqStateText(r.qq);
+  } catch (e) {
+    msg.style.color = '';
+    msg.textContent = '❌ ' + e.message;
+  }
+};
+
+$('amQQTest').onclick = async () => {
+  const pin = $('amPin').value.trim();
+  const msg = $('amQQMsg');
+  if (pin.length < 4) { msg.textContent = '先填上面的口令'; return; }
+  msg.style.color = '';
+  msg.textContent = '自测中…';
+  try {
+    const r = await post('/api/admin/qq/test', { pin });
+    const t = r.test || {};
+    msg.style.color = t.ok ? 'var(--ok,#3ddc84)' : '';
+    msg.textContent = t.ok
+      ? `✅ ${t.song || ''} · ${t.quality || ''} · CDN HTTP ${t.http} · ${t.ms}ms`
+      : `❌ ${t.detail || '失败'}（${t.step || '?'} 阶段）`;
+  } catch (e) {
+    msg.textContent = '❌ ' + e.message;
+  }
+};
+
+$('amQQClear').onclick = async () => {
+  const pin = $('amPin').value.trim();
+  const msg = $('amQQMsg');
+  if (pin.length < 4) { msg.textContent = '先填上面的口令'; return; }
+  if (!confirm('清除 QQ 会员凭据？\n清掉之后回到只走公共音源（会有 5 分钟 50 次的限流）。')) return;
+  try {
+    await post('/api/admin/qq', { pin, clear: true });
+    msg.style.color = '';
+    msg.textContent = '已清除，回落到公共音源。';
+    refresh();
+  } catch (e) {
+    msg.textContent = '❌ ' + e.message;
+  }
+};
+
+function renderNickList(r){
+  const box = $('amNickList');
+  box.style.display = '';
+  const ttlSec = (r && r.ttlSec) || 0;
+  const list = (r && r.nicks) || [];
+  if (!list.length) {
+    box.innerHTML = '<div class="nempty">现在没有任何昵称被占用。'
+      + (ttlSec ? `占用超过 ${ttlText(ttlSec)}没人用会自动释放。` : '') + '</div>';
+    return;
+  }
+  box.innerHTML = list.map((n) => {
+    const rel = n.releasesInSec > 0 ? ` · ${ttlText(n.releasesInSec)}后自动释放` : '';
+    const who = n.online ? '🟢 在线'
+      : (n.idleDays > 0 ? `闲置 ${n.idleDays} 天` : '刚离开') + rel;
+    return `<div class="nrow">
+      <div class="nn">${esc(n.nick)}</div>
+      <div class="nd">${who}</div>
+      <button class="nrel" data-nick="${esc(n.nick)}">释放</button>
+    </div>`;
+  }).join('');
+  box.querySelectorAll('.nrel').forEach((btn) => {
+    btn.onclick = async () => {
+      const nick = btn.dataset.nick;
+      const pin = $('amPin').value.trim();
+      if (!confirm(`释放昵称「${nick}」？\n释放后任何人都能立刻重新认领这个名字。`)) return;
+      btn.disabled = true;
+      try {
+        const rr = await post('/api/admin/nick/release', { pin, nick });
+        toast(`已释放「${rr.nick}」`, 'ok');
+        renderNickList(await post('/api/admin/nicks', { pin }));
+        refresh();
+      } catch (e) {
+        toast('释放失败：' + e.message, 'err');
+        btn.disabled = false;
+      }
+    };
+  });
+}
+$('amPin2').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('amOk').click(); });
+$('amPin').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  if (amMode === 'setup') $('amPin2').focus(); else $('amOk').click();
+});
+
+$('amOk').onclick = async () => {
+  const pin = $('amPin').value.trim();
+  const msg = $('amMsg');
+  const btn = $('amOk');
+  if (pin.length < 4) { msg.textContent = '口令至少 4 位'; return; }
+  if (amMode === 'setup' && pin !== $('amPin2').value.trim()) { msg.textContent = '两次输入不一致'; return; }
+  btn.disabled = true;
+  msg.textContent = '';
+  try {
+    await post(amMode === 'setup' ? '/api/admin/setup' : '/api/admin/verify', { pin });
+    adminPin = pin;
+    localStorage.setItem(ADMIN_KEY, pin);
+    paintAdmin();
+    closeAdminModal();
+    toast(amMode === 'setup' ? '管理员口令已设置，已解锁' : '管理员已解锁', 'ok');
+    if (amMode === 'setup') refresh();
+  } catch (e) {
+    if (amMode === 'setup' && /原管理员口令/.test(e.message)) {
+      amMode = 'unlock';
+      $('amTitle').textContent = '管理员验证';
+      $('amDesc').textContent = '这里解的是管理权限：直接切歌、管理昵称占用、换音源凭据。（「停止全场」所有人都能按，不用口令。）';
+      $('amPin2').style.display = 'none';
+      $('amOk').textContent = '解锁';
+      msg.textContent = '这台已经设过口令了，请直接输入';
+      return;
+    }
+    msg.textContent = e.message;
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+// 停止：所有人都能用（不需要管理员口令）—— 会掐断当前歌曲并清空播放列表
+$('btnStop').onclick = async () => {
+  if (!confirm('停止播放并清空播放列表？\n（所有人的点歌都会被清掉 · 点歌台里每个人都能按）')) return;
+  const btn = $('btnStop');
+  btn.disabled = true;
+  try {
+    const r = await post('/api/stop', { clientId: CID, nick: myNick });
+    toast(`⏹ 已停止${r.cleared ? `，清掉 ${r.cleared} 首待播` : ''}`, 'ok');
+    setTimeout(refresh, 500);
+  } catch (e) {
+    toast('停止失败：' + e.message, 'err');
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+paintAdmin();
+
+// ---------- 音量 ----------
+const vol = $('vol');
+let volTimer = null;
+vol.oninput = () => {
+  const v = +vol.value;
+  $('volTxt').textContent = v;
+  vol.style.setProperty('--vp', v + '%');
+  clearTimeout(volTimer);
+  volTimer = setTimeout(async () => {
+    try { await post('/api/volume', {volume:v}); toast('音量 ' + v, 'ok'); }
+    catch(e){ toast('设音量失败：'+e.message,'err'); }
+  }, 450);
+};
+vol.style.setProperty('--vp', vol.value + '%');
+
+// ---------- 定时关闭（睡眠定时器） ----------
+// 服务端只管"到点掐声"，倒计时显示在本地跑（1 秒一跳），每 2 秒的 refresh 顺带校准一次，
+// 免得手机息屏久了本地时间漂移。
+let sleepDeadline = 0;   // 本地推算的到点时刻（ms）
+let sleepState = null;   // 最近一次服务端快照
+
+/** 秒 → "12:34" / "1:29:59"（倒计时用，别用 2 小时 29 分那种啰嗦写法） */
+function hms(sec){
+  sec = Math.max(0, Math.round(sec || 0));
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  const mm = String(m).padStart(2, '0'), ss = String(s).padStart(2, '0');
+  return h ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
+}
+
+function syncSleep(s){
+  sleepState = s || null;
+  if (s && s.active && s.leftSec >= 0) sleepDeadline = Date.now() + s.leftSec * 1000;
+  else sleepDeadline = 0;
+  paintSleep();
+}
+
+/** 顶栏徽标 + 弹层（弹层开着才刷，省 DOM 操作） */
+function paintSleep(){
+  const s = sleepState || {};
+  const btn = $('btnSleep'), lab = $('slTop');
+  const left = sleepDeadline ? Math.max(0, Math.round((sleepDeadline - Date.now()) / 1000)) : 0;
+  btn.classList.toggle('on', !!s.active && left > 0);
+  btn.classList.toggle('hold', !s.active && !!s.hold);
+  lab.textContent = s.active && left > 0 ? hms(left) : (s.active ? '即将关' : (s.hold ? '已关' : ''));
+  if ($('sleepModal').classList.contains('show')) paintSleepBox();
+}
+
+function paintSleepBox(){
+  const s = sleepState || {};
+  const left = sleepDeadline ? Math.max(0, Math.round((sleepDeadline - Date.now()) / 1000)) : 0;
+  let txt;
+  if (s.active && s.mode === 'clock') {
+    txt = `⏳ 到点自动关：<b>${esc(s.at)}</b>（${s.repeat ? '每天' : '仅一次'}）`
+        + `${left > 0 ? `，还剩 ${hms(left)}` : ''}${s.setBy ? `｜${esc(s.setBy)} 设的` : ''}`;
+  } else if (s.active) {
+    txt = `⏳ 还有 <b>${hms(left)}</b> 自动关${s.setBy ? `｜${esc(s.setBy)} 设的` : ''}`;
+  } else if (s.hold) {
+    txt = `⏹ 已按定时关闭${s.firedAt ? `（${clock(s.firedAt)}）` : ''}`
+        + `，队列里还有 ${s.queueLeft || 0} 首 —— 点歌或按「继续播放」恢复`;
+  } else {
+    txt = `未设定时。到点会停声，队列保留（最长 ${s.maxMin || 720} 分钟）。`;
+  }
+  $('slNow').innerHTML = txt;
+  if (s.repeat != null) $('slRepeat').checked = !!s.repeat;
+  $('slResume').disabled = !s.hold;
+  $('slCancel').disabled = !s.active;
+}
+
+async function sleepApi(body){
+  $('slMsg').textContent = '';
+  try {
+    const r = await post('/api/sleep', { ...body, by: nick() });
+    if (r && r.sleep) syncSleep(r.sleep);
+    return r;
+  } catch (e) {
+    $('slMsg').textContent = e.message;
+    return null;
+  }
+}
+
+function openSleepModal(){
+  $('slMsg').textContent = '';
+  $('sleepModal').classList.add('show');
+  paintSleepBox();
+}
+function closeSleepModal(){ $('sleepModal').classList.remove('show'); }
+
+$('btnSleep').onclick = openSleepModal;
+$('slClose').onclick = closeSleepModal;
+$('sleepModal').onclick = (e) => { if (e.target === $('sleepModal')) closeSleepModal(); };
+
+// 预设按钮
+document.querySelectorAll('.slpreset button').forEach((b) => {
+  b.onclick = async () => {
+    const min = Number(b.dataset.min) || 0;
+    const r = await sleepApi({ minutes: min });
+    if (r) { toast(`已设定：${min} 分钟后自动关闭`, 'ok'); refresh(); }
+  };
+});
+
+// 自定义分钟
+$('slMinGo').onclick = async () => {
+  const min = Math.round(Number($('slMin').value));
+  if (!min || min < 1) { $('slMsg').textContent = '先填个分钟数（1 以上）'; return; }
+  const r = await sleepApi({ minutes: min });
+  if (r) { toast(`已设定：${min} 分钟后自动关闭`, 'ok'); $('slMin').value = ''; refresh(); }
+};
+$('slMin').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('slMinGo').click(); });
+
+// 到点关（可选每天重复）
+$('slAtGo').onclick = async () => {
+  const at = ($('slAt').value || '').trim();
+  if (!at) { $('slMsg').textContent = '先选个时间（24 小时制）'; return; }
+  const repeat = !!$('slRepeat').checked;
+  const r = await sleepApi({ at, repeat });
+  if (r) { toast(`已设定：${at} ${repeat ? '每天' : ''}自动关闭`, 'ok'); refresh(); }
+};
+
+$('slCancel').onclick = async () => {
+  const r = await sleepApi({ cancel: true });
+  if (r) { toast(r.cancelled ? '已取消定时关闭' : '本来就没设定时', 'ok'); refresh(); }
+};
+$('slResume').onclick = async () => {
+  const r = await sleepApi({ resume: true });
+  if (r) { toast(r.resumed ? '继续播放' : '现在没被按住', 'ok'); refresh(); }
+};
+
+// 本地倒计时：每 400ms 走一次（秒数跳得准，也不费电）
+setInterval(paintSleep, 400);
+
+// ---------- 初始化 ----------
+paintMe();
+refresh();
+live();
+setInterval(() => { refresh(); live(); }, 2000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { refresh(); live(); } });
+// 页面被切到后台久了，回来立刻补一次心跳（免得别人以为你走了）
+window.addEventListener('focus', () => live());
+</script>
+</body>
+</html>

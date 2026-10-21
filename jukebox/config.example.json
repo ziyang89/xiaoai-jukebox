@@ -1,0 +1,60 @@
+{
+  "_说明": "复制此文件为 config.json 并填入真实值。容器部署时挂载到 /data/config.json 并设 JB_CONFIG=/data/config.json",
+
+  "port": 58092,
+
+  "_publicBase说明": "音箱能访问到的本服务地址。填 NAS 的内网地址，例如 http://192.168.1.100:58092；留空则自动探测。",
+  "publicBase": "http://192.168.1.100:58092",
+
+  "engine": {
+    "_type说明": "songloft = 走 songloft 的「智能音箱」插件（推荐）；xiaomusic = 走 xiaomusic 的 HTTP API（零鉴权）",
+    "type": "songloft",
+    "base": "http://192.168.1.100:58091",
+    "prefix": "/api/v1/jsplugin/miot",
+    "username": "admin",
+    "password": "把这里换成 songloft 的登录密码",
+    "deviceId": "",
+    "accountId": ""
+  },
+
+  "_音源说明": "qq = 自建源（直连 QQ 官方接口，用会员 cookie，不占公共配额）；netease = GD Studio 公共源（5 分钟 50 次，兜底用）",
+  "sources": ["qq", "netease"],
+  "searchSources": ["qq", "netease"],
+  "searchEnough": 3,
+
+  "_qq凭据说明": "⚠️ 别把 qm_keyst 写进这个模板！用页面「管理员 → QQ 会员音源」写入，会落在 <dataDir>/runtime-config.json，不随镜像走。这里只留空壳说明字段。",
+  "qq": {
+    "key": "",
+    "uin": "",
+    "guid": "",
+    "quality": "320k"
+  },
+
+  "retry": 3,
+  "br": 320,
+  "searchCount": 20,
+
+  "_随机电台说明": "队列播空时自动从 NAS 曲库随机挑一首接着放。只放已经下载到 NAS 的歌，不碰音源、不烧配额。管理员「停止播放」会临时按住，下次有人点歌自动恢复。",
+  "autoRadio": true,
+  "radioRecentMax": 10,
+  "radioErrorPauseSec": 60,
+
+  "_定时关闭说明": "顶栏 ⏱ 设置的睡眠定时器：到点停声、队列保留、调度器按住（有人点歌或点「继续播放」才解除）。这里只配「最长能设多少分钟」。",
+  "sleepMaxMin": 720,
+
+  "_排行榜说明": "左栏「排行榜」卡片：QQ 榜单（30 个榜），点歌走和搜索完全相同的链路。榜单是日更，缓存 30 分钟足够；缓存同时是断网/QQ 挂掉时的兜底。",
+  "toplistCount": 50,
+  "toplistTtlMin": 30,
+
+  "_队列点赞说明": "队列里每首歌的「👍 x/N」：凑够 N 个不同的人点赞才往前挪一位（挪完清零）。默认 3 = 「超过 2 名」；设 1 就退回一键置顶。",
+  "queueTopNeed": 3,
+
+  "volume": 15,
+  "forceVolume": true,
+
+  "pollIntervalMs": 2000,
+  "overtimeGraceSec": 25,
+  "prefetchCount": 2,
+
+  "logLevel": "info"
+}

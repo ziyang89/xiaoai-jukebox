@@ -1,0 +1,29 @@
+# 运行时数据 —— 绝对不要提交
+data/
+*.log
+*.pid
+
+# 真实配置（含你自己的地址 / 设备 ID / 口令）
+config.json
+jukebox/config.json
+jukebox/deploy/config.json
+
+# 依赖
+node_modules/
+.venv/
+venv/
+
+# 测试产物（截图、mock 运行时目录、临时 profile）
+jukebox/tests/.preview/
+jukebox/tests/.run*/
+jukebox/tests/.demo/
+*.png.tmp
+
+# 备份 / 编辑器
+.backup-*/
+*.bak
+*.orig
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
